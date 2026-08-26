@@ -52,7 +52,7 @@ async function refresh() {
 
   const body = d.rows.map((r) => `
     <tr>
-      <td class="${daysClass(r.days_until)}">${fmtDays(r.days_until)}<br><small>${fmtDate(r.next_premium_date)}</small></td>
+      <td><span class="pill ${daysClass(r.days_until)}">${fmtDays(r.days_until)}</span><br><small>${fmtDate(r.next_premium_date)}</small></td>
       <td>${esc(r.client_name)}</td>
       <td>${esc(r.client_email)}</td>
       <td>${esc(r.rm_name)}</td>
