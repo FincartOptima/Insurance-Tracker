@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Upload{% endblock %}
+
+{% block content %}
+<h1>Upload data</h1>
+<p class="lede">
+  Each Insurance export is added to the stored history and matched on Policy No,
+  so re-uploading is safe and never creates duplicates. Only <strong>Confirmed</strong>
+  rows are kept, and renewal dates come from <code>NextPremimum_Date</code>.
+</p>
+
+<form method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" class="card">
+  <div class="field">
+    <label for="insurance">Insurance export</label>
+    <input type="file" name="insurance" id="insurance" accept=".xls,.xlsx">
+    <small>Any Insurance_YYYY_MM_DD export.</small>
+  </div>
+  <button type="submit" class="primary">Upload &amp; process</button>
+</form>
+
+<div class="status-line">
+  <span><strong>{{ total }}</strong> policies stored</span>
+  {% if last_upload %}<span>Last upload: {{ last_upload.replace('T', ' ') }}</span>{% endif %}
+</div>
+
+{% if result %}
+<div class="card result">
+  <h2>Upload summary</h2>
+  <div class="stat-grid">
+    <div><span class="stat">{{ result.inserted }}</span><label>new policies</label></div>
+    <div><span class="stat">{{ result.updated }}</span><label>updated</label></div>
+    <div><span class="stat">{{ result.skipped }}</span><label>skipped (not Confirmed)</label></div>
+    <div><span class="stat">{{ result.no_date }}</span><label>no renewal date</label></div>
+  </div>
+
+  {% if result.no_date %}
+    <p class="notice warn">{{ result.no_date }} stored polic{{ 'y has' if result.no_date == 1 else 'ies have' }} no NextPremimum_Date, so they can never appear in a bucket below.</p>
+  {% endif %}
+
+  {% if result.conflicts %}
+  <details class="notice error">
+    <summary>{{ result.conflicts|length }} policy number(s) appeared twice with different premiums &mdash; only the last row was kept</summary>
+    <ul>
+      {% for c in result.conflicts %}
+      <li><span class="mono">{{ c.policy_no }}</span> &mdash; {{ c.client }} ({{ c.policy }}):
+          kept {{ '{:,.0f}'.format(c.kept or 0) }}, dropped {{ '{:,.0f}'.format(c.dropped or 0) }}</li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+
+  <a class="primary" href="{{ url_for('dashboard') }}">Open dashboard</a>
+</div>
+{% endif %}
+
+<form method="post" action="{{ url_for('reset') }}" class="danger-zone"
+      onsubmit="return confirm('Delete all stored renewal data? This cannot be undone.');">
+  <button type="submit" class="danger">Clear all stored data</button>
+</form>
+{% endblock %}

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+{% if total == 0 %}
+  <div class="empty">
+    <h1>Nothing to show yet</h1>
+    <p>Upload an insurance export to start tracking renewals.</p>
+    <a class="primary" href="{{ url_for('home') }}">Go to upload</a>
+  </div>
+{% else %}
+
+<div class="bucket-cards" id="bucket-cards">
+  <button class="bcard" data-bucket="overdue">
+    <label>Overdue</label><span id="c-overdue">&mdash;</span>
+  </button>
+  <button class="bcard" data-bucket="tomorrow">
+    <label>Next Day</label><span id="c-tomorrow">&mdash;</span>
+  </button>
+  <button class="bcard" data-bucket="next2">
+    <label>Next 2 Days</label><span id="c-next2">&mdash;</span>
+  </button>
+  <button class="bcard active" data-bucket="next7">
+    <label>Next 7 Days</label><span id="c-next7">&mdash;</span>
+  </button>
+  <button class="bcard muted" data-bucket="all">
+    <label>All upcoming</label><span>&rarr;</span>
+  </button>
+</div>
+<p class="asof" id="asof"></p>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2 id="table-title">Next 7 Days</h2>
+    <input type="search" id="search" placeholder="Search client name&hellip;">
+  </div>
+  <div class="table-scroll">
+    <table id="table">
+      <thead>
+        <tr>
+          <th>Renews</th><th>Client</th><th>Email</th><th>RM</th>
+          <th>Policy</th><th>Partner</th><th>Type</th>
+          <th>Sum Insured</th><th>Premium</th><th>Policy No</th>
+        </tr>
+      </thead>
+      <tbody id="table-body"></tbody>
+    </table>
+  </div>
+  <p class="empty-row" id="empty-row" style="display:none;">No renewals in this window.</p>
+</section>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if total > 0 %}
+<script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+{% endif %}
+{% endblock %}
