@@ -27,6 +27,21 @@ class IngestError(Exception):
     pass
 
 
+def _conflict_update(column):
+    """Upsert clause for one column on a re-uploaded policy.
+
+    next_premium_date is special: once someone has manually rescheduled a
+    policy (rescheduled_at is set), a later re-upload of the same source row
+    must not silently overwrite that with the file's original, stale date.
+    """
+    if column == "next_premium_date":
+        return (
+            "next_premium_date = CASE WHEN renewals.rescheduled_at IS NULL "
+            "THEN EXCLUDED.next_premium_date ELSE renewals.next_premium_date END"
+        )
+    return f"{column} = EXCLUDED.{column}"
+
+
 def _open_workbook(path):
     """Open .xlsx, or a .xls that is really a renamed .xlsx (these exports are).
 
@@ -150,7 +165,7 @@ def ingest_file(insurance_path, source_name):
                     "ON CONFLICT (policy_no) DO UPDATE SET {}".format(
                         ", ".join(cols),
                         ", ".join(["%s"] * len(cols)),
-                        ", ".join(f"{c} = EXCLUDED.{c}" for c in cols if c != "policy_no"),
+                        ", ".join(_conflict_update(c) for c in cols if c != "policy_no"),
                     ),
                     [rec[c] for c in cols],
                 )

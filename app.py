@@ -88,6 +88,19 @@ def api_renewals():
     return jsonify(data)
 
 
+@app.route("/api/renewals/<policy_no>", methods=["PATCH"])
+def update_renewal(policy_no):
+    data = request.get_json(silent=True) or {}
+    conn = db.connect()
+    try:
+        result = queries.update_field(conn, policy_no, data.get("field"), data.get("value"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    finally:
+        conn.close()
+    return jsonify(result)
+
+
 @app.route("/reset", methods=["POST"])
 def reset():
     db.init_db()

@@ -1,6 +1,10 @@
 """Renewal bucket counts and the client-detail table, computed live against today."""
 import datetime as dt
 
+from ingest import _to_date
+
+STATUS_VALUES = ("Not Done", "Done")
+
 BUCKET_LABELS = {
     "overdue": "Overdue",
     "tomorrow": "Next Day",
@@ -43,6 +47,9 @@ def _row_out(r, days):
         "premium_amount": float(r["premium_amount"]) if r["premium_amount"] is not None else None,
         "next_premium_date": r["next_premium_date"].isoformat() if r["next_premium_date"] else None,
         "days_until": days,
+        "status": r["status"] or "Not Done",
+        "remarks": r["remarks"] or "",
+        "rescheduled": r["rescheduled_at"] is not None,
     }
 
 
@@ -83,4 +90,40 @@ def build(conn, bucket, search):
         "bucket_label": BUCKET_LABELS[bucket],
         "rows": table,
         "as_of": today.isoformat(),
+    }
+
+
+def update_field(conn, policy_no, field, value):
+    """Apply one ops-tracking edit (status / remarks / a manual reschedule).
+
+    Each branch owns a literal SQL string - field is never interpolated into
+    the query, so an unexpected field name can only ever raise, never reach SQL.
+    """
+    if field == "status":
+        if value not in STATUS_VALUES:
+            raise ValueError("Status must be 'Not Done' or 'Done'")
+        sql = "UPDATE renewals SET status = %s WHERE policy_no = %s"
+    elif field == "remarks":
+        value = "" if value is None else str(value)[:2000]
+        sql = "UPDATE renewals SET remarks = %s WHERE policy_no = %s"
+    elif field == "next_premium_date":
+        parsed = _to_date(value)
+        if parsed is None:
+            raise ValueError("Invalid date")
+        value = parsed
+        sql = ("UPDATE renewals SET next_premium_date = %s, rescheduled_at = now() "
+               "WHERE policy_no = %s")
+    else:
+        raise ValueError(f"Cannot update field '{field}'")
+
+    with conn.cursor() as cur:
+        cur.execute(sql, (value, policy_no))
+        if cur.rowcount == 0:
+            raise ValueError(f"No policy found with number '{policy_no}'")
+    conn.commit()
+
+    return {
+        "policy_no": policy_no,
+        "field": field,
+        "value": value.isoformat() if hasattr(value, "isoformat") else value,
     }

@@ -18,9 +18,18 @@ CREATE TABLE IF NOT EXISTS renewals (
     premium_amount    NUMERIC,
     next_premium_date DATE,
     source_file       TEXT,
-    uploaded_at       TIMESTAMP
+    uploaded_at       TIMESTAMP,
+    status            TEXT NOT NULL DEFAULT 'Not Done',
+    remarks           TEXT NOT NULL DEFAULT '',
+    rescheduled_at    TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_next_premium ON renewals(next_premium_date);
+
+-- Adds these columns (with the same defaults) to a database created before
+-- this feature existed; a no-op on a fresh install where they're already there.
+ALTER TABLE renewals ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'Not Done';
+ALTER TABLE renewals ADD COLUMN IF NOT EXISTS remarks TEXT NOT NULL DEFAULT '';
+ALTER TABLE renewals ADD COLUMN IF NOT EXISTS rescheduled_at TIMESTAMP;
 
 CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
