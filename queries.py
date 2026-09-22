@@ -10,6 +10,7 @@ BUCKET_LABELS = {
     "tomorrow": "Next Day",
     "next2": "Next 2 Days",
     "next7": "Next 7 Days",
+    "next30": "Next 30 Days",
     "all": "All upcoming",
 }
 
@@ -17,8 +18,11 @@ BUCKET_LABELS = {
 def _in_bucket(days, bucket):
     """Windows include today (day 0): a renewal due today must show up
     somewhere actionable, not only fall into the 'All upcoming' catch-all.
-    Windows nest (Next Day subset of Next 2 Days subset of Next 7 Days), which
-    matches how "what's due this week" is meant to read - it includes tomorrow.
+    Windows nest (Next Day subset of Next 2 Days subset of Next 7 Days subset
+    of Next 30 Days), which matches how "what's due this month" is meant to
+    read - it includes what's due tomorrow. Next 30 Days exists because
+    actually reaching a client before they renew needs more runway than a
+    week - a week's notice is often too late to matter.
     """
     if days is None:
         return False
@@ -30,6 +34,8 @@ def _in_bucket(days, bucket):
         return 0 <= days <= 2
     if bucket == "next7":
         return 0 <= days <= 7
+    if bucket == "next30":
+        return 0 <= days <= 30
     return True  # "all": anything with a date, overdue or future
 
 
@@ -50,6 +56,7 @@ def _row_out(r, days):
         "status": r["status"] or "Not Done",
         "remarks": r["remarks"] or "",
         "rescheduled": r["rescheduled_at"] is not None,
+        "phone": r["phone"] or "",
     }
 
 
@@ -72,7 +79,7 @@ def build(conn, bucket, search):
     # counts can never drift out of sync with what selecting that card shows.
     counts = {
         b: sum(1 for _, days in enriched if _in_bucket(days, b))
-        for b in ("overdue", "tomorrow", "next2", "next7")
+        for b in ("overdue", "tomorrow", "next2", "next7", "next30")
     }
     no_date = sum(1 for _, days in enriched if days is None)
 
@@ -106,6 +113,9 @@ def update_field(conn, policy_no, field, value):
     elif field == "remarks":
         value = "" if value is None else str(value)[:2000]
         sql = "UPDATE renewals SET remarks = %s WHERE policy_no = %s"
+    elif field == "phone":
+        value = "" if value is None else str(value).strip()[:40]
+        sql = "UPDATE renewals SET phone = %s WHERE policy_no = %s"
     elif field == "next_premium_date":
         parsed = _to_date(value)
         if parsed is None:

@@ -2,6 +2,7 @@
 import datetime as dt
 import io
 import os
+import re
 
 from openpyxl import load_workbook
 
@@ -84,6 +85,20 @@ def _to_date(value):
         except ValueError:
             continue
     return None
+
+
+def normalize_whatsapp_number(value):
+    """Digits-only, country-code-prefixed number for a wa.me link, or None."""
+    if value in (None, ""):
+        return None
+    digits = re.sub(r"\D", "", str(value))
+    if not digits:
+        return None
+    if len(digits) == 10:
+        return "91" + digits  # bare Indian mobile number
+    if len(digits) == 11 and digits.startswith("0"):
+        return "91" + digits[1:]  # leading trunk 0
+    return digits  # already carries a country code (or unusual) - use as-is
 
 
 def ingest_file(insurance_path, source_name):
