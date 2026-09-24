@@ -82,23 +82,31 @@ function renewalWhatsApp(r) {
     ` Would you like us to go ahead with the renewal? Let us know if you have any questions!`;
 }
 
+function syncFilterOptions(selectId, defaultLabel, options, selectedValue) {
+  const select = $(selectId);
+  const current = [...select.options].map((o) => o.value).join(",");
+  const fresh = ["all", ...options].join(",");
+  if (current !== fresh) {
+    select.innerHTML = `<option value="all">${defaultLabel}</option>` +
+      options.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
+    select.value = selectedValue;
+  }
+}
+
 async function refresh() {
   const params = new URLSearchParams({
     bucket: currentBucket,
     q: $("search").value,
     type: $("type-filter").value,
+    team: $("team-filter").value,
+    rm: $("rm-filter").value,
   });
   const res = await fetch("/api/renewals?" + params.toString());
   const d = await res.json();
 
-  const typeSelect = $("type-filter");
-  const currentOptions = [...typeSelect.options].map((o) => o.value).join(",");
-  const freshOptions = ["all", ...d.type_options].join(",");
-  if (currentOptions !== freshOptions) {
-    typeSelect.innerHTML = `<option value="all">All policy types</option>` +
-      d.type_options.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join("");
-    typeSelect.value = d.insurance_type;
-  }
+  syncFilterOptions("type-filter", "All policy types", d.type_options, d.insurance_type);
+  syncFilterOptions("team-filter", "All teams", d.team_options, d.team);
+  syncFilterOptions("rm-filter", "All RMs", d.rm_options, d.rm);
 
   $("c-overdue").textContent = d.counts.overdue;
   $("c-tomorrow").textContent = d.counts.tomorrow;
@@ -117,6 +125,7 @@ async function refresh() {
       <td>${esc(r.client_name)}</td>
       <td>${esc(r.client_email)}</td>
       <td>${esc(r.rm_name)}</td>
+      <td>${esc(r.team)}</td>
       <td>${esc(r.policy)}</td>
       <td>${esc(r.policy_partner)}</td>
       <td>${esc(r.insurance_type)}</td>
@@ -255,5 +264,7 @@ $("search").addEventListener("input", () => {
 });
 
 $("type-filter").addEventListener("change", refresh);
+$("team-filter").addEventListener("change", refresh);
+$("rm-filter").addEventListener("change", refresh);
 
 refresh();

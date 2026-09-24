@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS renewals (
     status            TEXT NOT NULL DEFAULT 'Not Done',
     remarks           TEXT NOT NULL DEFAULT '',
     rescheduled_at    TIMESTAMP,
-    phone             TEXT
+    phone             TEXT,
+    team              TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_next_premium ON renewals(next_premium_date);
 
@@ -32,11 +33,23 @@ ALTER TABLE renewals ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'Not 
 ALTER TABLE renewals ADD COLUMN IF NOT EXISTS remarks TEXT NOT NULL DEFAULT '';
 ALTER TABLE renewals ADD COLUMN IF NOT EXISTS rescheduled_at TIMESTAMP;
 ALTER TABLE renewals ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE renewals ADD COLUMN IF NOT EXISTS team TEXT;
 
 CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT
 );
+
+-- RM -> Team lookup, uploaded via the Employee Reference file. Wiped and
+-- reloaded whole on every upload; matched onto renewals.rm_name by exact
+-- name, falling back to a subset-of-tokens match (see ingest.resolve_team).
+CREATE TABLE IF NOT EXISTS employee_ref (
+    id       SERIAL PRIMARY KEY,
+    emp_code TEXT,
+    team     TEXT NOT NULL,
+    name     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_employee_ref_name ON employee_ref (lower(name));
 """
 
 

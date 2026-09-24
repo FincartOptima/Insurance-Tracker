@@ -15,13 +15,38 @@
     <input type="file" name="insurance" id="insurance" accept=".xls,.xlsx">
     <small>Any Insurance_YYYY_MM_DD export.</small>
   </div>
+  <div class="field">
+    <label for="employee_ref">Employee reference (RM &rarr; Team)
+      {% if last_employee %}<span class="ok-tag">stored</span>{% else %}<span class="warn-tag">not uploaded yet</span>{% endif %}
+    </label>
+    <input type="file" name="employee_ref" id="employee_ref" accept=".xls,.xlsx">
+    <small>Needs Team and Name columns. Only needed once, or when RMs/teams change &mdash; re-uploading re-checks every stored policy.</small>
+  </div>
   <button type="submit" class="primary">Upload &amp; process</button>
 </form>
 
 <div class="status-line">
   <span><strong>{{ total }}</strong> policies stored</span>
   {% if last_upload %}<span>Last upload: {{ last_upload.replace('T', ' ') }}</span>{% endif %}
+  {% if last_employee %}<span>Team mapping updated: {{ last_employee.replace('T', ' ') }}</span>{% endif %}
 </div>
+
+{% if employee_result %}
+<div class="card result">
+  <h2>Employee reference summary</h2>
+  <div class="stat-grid">
+    <div><span class="stat">{{ employee_result.loaded }}</span><label>employees loaded</label></div>
+    <div><span class="stat">{{ employee_result.unmatched|length }}</span><label>RM names still unmatched</label></div>
+  </div>
+  {% if employee_result.unmatched %}
+  <details class="notice warn">
+    <summary>{{ employee_result.unmatched|length }} RM name(s) in your policies don't match anyone in this file &mdash; those policies are filed under <em>Unassigned</em></summary>
+    <ul>{% for name in employee_result.unmatched %}<li>{{ name }}</li>{% endfor %}</ul>
+    <p>Add them to the employee reference file and re-upload it to fix the Team split.</p>
+  </details>
+  {% endif %}
+</div>
+{% endif %}
 
 {% if result %}
 <div class="card result">
@@ -46,6 +71,13 @@
           kept {{ '{:,.0f}'.format(c.kept or 0) }}, dropped {{ '{:,.0f}'.format(c.dropped or 0) }}</li>
       {% endfor %}
     </ul>
+  </details>
+  {% endif %}
+
+  {% if result.unmatched_rms %}
+  <details class="notice warn">
+    <summary>{{ result.unmatched_rms|length }} RM name(s) not found in the employee reference &mdash; filed under <em>Unassigned</em></summary>
+    <ul>{% for name in result.unmatched_rms %}<li>{{ name }}</li>{% endfor %}</ul>
   </details>
   {% endif %}
 

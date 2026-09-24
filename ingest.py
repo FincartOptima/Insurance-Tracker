@@ -23,9 +23,17 @@ COLUMN_MAP = {
 }
 NUMERIC_COLS = {"sum_assured", "premium_amount"}
 
+UNASSIGNED_TEAM = "Unassigned"
+
 
 class IngestError(Exception):
     pass
+
+
+def _norm_name(value):
+    if value in (None, ""):
+        return ""
+    return re.sub(r"\s+", " ", str(value)).strip().casefold()
 
 
 def _conflict_update(column):
@@ -101,6 +109,116 @@ def normalize_whatsapp_number(value):
     return digits  # already carries a country code (or unusual) - use as-is
 
 
+def resolve_team(rm_name, emp_map):
+    """RM name -> Team. Exact match first, then a subset-of-tokens match
+    (so 'Swaraj Thakur' resolves against an employee record of
+    'Swaraj Singh Thakur'). Blank or genuinely unmatched -> Unassigned,
+    with the raw name returned for reporting in that second case.
+    """
+    name = _norm_name(rm_name)
+    if not name:
+        return UNASSIGNED_TEAM, None
+    if name in emp_map:
+        return emp_map[name], None
+
+    tokens = set(name.split())
+    hits = [full for full in emp_map if tokens <= set(full.split())]
+    if len(hits) == 1:
+        return emp_map[hits[0]], None
+    return UNASSIGNED_TEAM, str(rm_name).strip()
+
+
+def recompute_teams(conn):
+    """Re-resolve team for every stored policy from the current employee_ref.
+
+    Always applies to every row (not just ones missing a team) - rm_name
+    itself gets refreshed on every insurance re-upload, so a policy that
+    changed hands to a different RM should have its team follow.
+    """
+    with conn.cursor() as cur:
+        cur.execute("SELECT lower(name) AS name, team FROM employee_ref")
+        emp_map = {r["name"]: r["team"] for r in cur.fetchall()}
+
+        cur.execute("SELECT policy_no, rm_name FROM renewals")
+        rows = cur.fetchall()
+
+        unmatched = set()
+        for r in rows:
+            team, unmatched_name = resolve_team(r["rm_name"], emp_map)
+            if unmatched_name:
+                unmatched.add(unmatched_name)
+            cur.execute("UPDATE renewals SET team = %s WHERE policy_no = %s",
+                        (team, r["policy_no"]))
+    conn.commit()
+    return sorted(unmatched)
+
+
+def ingest_employee_file(path, source_name):
+    """Load an Employee Reference file (Emp Code, Team, Name) and replace
+    the stored mapping, then re-resolve every policy's team against it.
+    """
+    db.init_db()
+    conn = db.connect()
+    try:
+        wb = _open_workbook(path)
+        ws = wb[wb.sheetnames[0]]
+        rows = ws.iter_rows(values_only=True)
+        try:
+            header = [str(c).strip() if c is not None else "" for c in next(rows)]
+        except StopIteration:
+            raise IngestError("The employee reference file is empty.")
+
+        norm = [h.strip().casefold() for h in header]
+
+        def find(*keywords):
+            for i, h in enumerate(norm):
+                if any(k in h for k in keywords):
+                    return i
+            return None
+
+        code_i = find("emp code", "empcode", "employee code")
+        team_i = find("team")
+        name_i = find("name")
+        if team_i is None or name_i is None:
+            raise IngestError("Couldn't find both a Team and a Name column in this file.")
+
+        entries = []
+        for raw in rows:
+            if raw is None or all(v is None for v in raw):
+                continue
+            team = raw[team_i] if team_i < len(raw) else None
+            name = raw[name_i] if name_i < len(raw) else None
+            if not team or not name:
+                continue
+            code = raw[code_i] if (code_i is not None and code_i < len(raw)) else None
+            entries.append((
+                str(code).strip() if code else None,
+                str(team).strip(),
+                str(name).strip(),
+            ))
+        wb.close()
+
+        if not entries:
+            raise IngestError("No usable rows (with both a Team and a Name) found.")
+
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM employee_ref")
+            cur.executemany(
+                "INSERT INTO employee_ref (emp_code, team, name) VALUES (%s, %s, %s)",
+                entries,
+            )
+        conn.commit()
+
+        unmatched = recompute_teams(conn)
+        db.set_meta(conn, "last_employee_upload", dt.datetime.now().isoformat(timespec="seconds"))
+        db.set_meta(conn, "last_employee_source", source_name)
+        conn.commit()
+
+        return {"loaded": len(entries), "unmatched": unmatched}
+    finally:
+        conn.close()
+
+
 def ingest_file(insurance_path, source_name):
     """Load one export into the DB. Returns a summary dict for the UI."""
     db.init_db()
@@ -147,6 +265,10 @@ def ingest_file(insurance_path, source_name):
 
                 for col in NUMERIC_COLS:
                     rec[col] = _to_float(rec[col])
+                # Trimmed so a stray trailing space doesn't quietly split one
+                # RM into two entries in the RM filter dropdown.
+                if rec["rm_name"]:
+                    rec["rm_name"] = str(rec["rm_name"]).strip()
                 rec["next_premium_date"] = _to_date(rec["next_premium_date"])
                 if rec["next_premium_date"] is None:
                     no_date += 1
@@ -193,6 +315,7 @@ def ingest_file(insurance_path, source_name):
         db.set_meta(conn, "last_upload", now)
         db.set_meta(conn, "last_source", source_name)
         conn.commit()
+        unmatched_rms = recompute_teams(conn)
 
         return {
             "inserted": inserted,
@@ -201,6 +324,7 @@ def ingest_file(insurance_path, source_name):
             "no_date": no_date,
             "total_rows": db.count_renewals(conn),
             "conflicts": conflicts,
+            "unmatched_rms": unmatched_rms,
         }
     finally:
         conn.close()

@@ -29,47 +29,61 @@ def dashboard():
     return render_template("dashboard.html", total=total)
 
 
+def _render_upload_page(result=None, employee_result=None):
+    conn = db.connect()
+    try:
+        total = db.count_renewals(conn)
+        last = db.get_meta(conn, "last_upload")
+        last_employee = db.get_meta(conn, "last_employee_upload")
+    finally:
+        conn.close()
+    return render_template(
+        "upload.html", total=total, last_upload=last, last_employee=last_employee,
+        result=result, employee_result=employee_result,
+    )
+
+
+def _save_and_run(file_storage, run):
+    ext = os.path.splitext(file_storage.filename)[1].lower()
+    if ext not in ALLOWED:
+        raise ingest.IngestError(f"'{file_storage.filename}' is not an Excel file. Upload .xls or .xlsx.")
+    fd, tmp_path = tempfile.mkstemp(suffix=ext)
+    os.close(fd)
+    file_storage.save(tmp_path)
+    try:
+        return run(tmp_path, file_storage.filename)
+    finally:
+        os.remove(tmp_path)
+
+
 @app.route("/upload", methods=["GET", "POST"])
 def upload():
     db.init_db()
 
     if request.method == "GET":
-        conn = db.connect()
-        try:
-            total = db.count_renewals(conn)
-            last = db.get_meta(conn, "last_upload")
-        finally:
-            conn.close()
-        return render_template("upload.html", total=total, last_upload=last, result=None)
+        return _render_upload_page()
 
-    file = request.files.get("insurance")
-    if not file or not file.filename:
-        flash("Choose a file to upload.", "error")
+    insurance_file = request.files.get("insurance")
+    employee_file = request.files.get("employee_ref")
+    if not (insurance_file and insurance_file.filename) and not (employee_file and employee_file.filename):
+        flash("Choose at least one file to upload.", "error")
         return redirect(url_for("upload"))
 
-    ext = os.path.splitext(file.filename)[1].lower()
-    if ext not in ALLOWED:
-        flash(f"'{file.filename}' is not an Excel file. Upload .xls or .xlsx.", "error")
-        return redirect(url_for("upload"))
-
-    fd, tmp_path = tempfile.mkstemp(suffix=ext)
-    os.close(fd)
-    file.save(tmp_path)
+    employee_result = None
     try:
-        result = ingest.ingest_file(tmp_path, file.filename)
+        # Employee reference first, so an insurance file uploaded in the same
+        # submission resolves teams against the freshly uploaded mapping.
+        if employee_file and employee_file.filename:
+            employee_result = _save_and_run(employee_file, ingest.ingest_employee_file)
+
+        result = None
+        if insurance_file and insurance_file.filename:
+            result = _save_and_run(insurance_file, ingest.ingest_file)
     except ingest.IngestError as exc:
         flash(str(exc), "error")
         return redirect(url_for("upload"))
-    finally:
-        os.remove(tmp_path)
 
-    conn = db.connect()
-    try:
-        total = db.count_renewals(conn)
-        last = db.get_meta(conn, "last_upload")
-    finally:
-        conn.close()
-    return render_template("upload.html", total=total, last_upload=last, result=result)
+    return _render_upload_page(result=result, employee_result=employee_result)
 
 
 @app.route("/api/renewals")
@@ -81,6 +95,8 @@ def api_renewals():
             bucket=request.args.get("bucket", "next7"),
             search=request.args.get("q", ""),
             insurance_type=request.args.get("type", "all"),
+            team=request.args.get("team", "all"),
+            rm=request.args.get("rm", "all"),
         )
     finally:
         conn.close()

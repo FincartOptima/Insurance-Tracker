@@ -87,6 +87,12 @@ code { font-family: var(--mono); background: var(--card-alt); padding: 1px 6px; 
   width: 100%; padding: 10px; border: 1px dashed var(--line);
   border-radius: 6px; background: var(--card-alt); font-size: 14px; color: var(--ink);
 }
+.ok-tag, .warn-tag {
+  font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+  margin-left: 6px; vertical-align: middle; font-family: var(--sans);
+}
+.ok-tag { background: var(--ok-bg); color: var(--ok); }
+.warn-tag { background: var(--warn-bg); color: var(--warn); }
 
 button, .primary {
   display: inline-block; border: 1px solid var(--brand); border-radius: 6px;

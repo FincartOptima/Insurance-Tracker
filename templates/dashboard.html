@@ -36,6 +36,12 @@
   <div class="panel-head">
     <h2 id="table-title">Next 7 Days</h2>
     <div class="panel-filters">
+      <select id="team-filter">
+        <option value="all">All teams</option>
+      </select>
+      <select id="rm-filter">
+        <option value="all">All RMs</option>
+      </select>
       <select id="type-filter">
         <option value="all">All policy types</option>
       </select>
@@ -46,7 +52,7 @@
     <table id="table">
       <thead>
         <tr>
-          <th>Renews</th><th>Client</th><th>Email</th><th>RM</th>
+          <th>Renews</th><th>Client</th><th>Email</th><th>RM</th><th>Team</th>
           <th>Policy</th><th>Partner</th><th>Type</th>
           <th>Sum Insured</th><th>Premium</th><th>Policy No</th>
           <th>Status</th><th>Reschedule</th><th>Remarks</th><th>Contact</th>

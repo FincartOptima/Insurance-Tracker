@@ -1,7 +1,7 @@
 """Renewal bucket counts and the client-detail table, computed live against today."""
 import datetime as dt
 
-from ingest import _to_date
+from ingest import UNASSIGNED_TEAM, _to_date
 
 STATUS_VALUES = ("Not Done", "Done")
 
@@ -57,10 +57,11 @@ def _row_out(r, days):
         "remarks": r["remarks"] or "",
         "rescheduled": r["rescheduled_at"] is not None,
         "phone": r["phone"] or "",
+        "team": r["team"] or UNASSIGNED_TEAM,
     }
 
 
-def build(conn, bucket, search, insurance_type="all"):
+def build(conn, bucket, search, insurance_type="all", team="all", rm="all"):
     if bucket not in BUCKET_LABELS:
         bucket = "next7"
 
@@ -68,12 +69,18 @@ def build(conn, bucket, search, insurance_type="all"):
         cur.execute("SELECT * FROM renewals")
         rows = cur.fetchall()
 
-    # Every type present across ALL data, regardless of the current filter,
-    # so the dropdown's option list never shrinks just because a filter is active.
+    # Every value present across ALL data, regardless of the current filters,
+    # so a dropdown's option list never shrinks just because a filter is active.
     type_options = sorted({r["insurance_type"] for r in rows if r["insurance_type"]})
+    team_options = sorted({r["team"] or UNASSIGNED_TEAM for r in rows})
+    rm_options = sorted({r["rm_name"] for r in rows if r["rm_name"]})
 
     if insurance_type and insurance_type != "all":
         rows = [r for r in rows if r["insurance_type"] == insurance_type]
+    if team and team != "all":
+        rows = [r for r in rows if (r["team"] or UNASSIGNED_TEAM) == team]
+    if rm and rm != "all":
+        rows = [r for r in rows if r["rm_name"] == rm]
 
     today = dt.date.today()
     enriched = []
@@ -107,6 +114,10 @@ def build(conn, bucket, search, insurance_type="all"):
         "as_of": today.isoformat(),
         "type_options": type_options,
         "insurance_type": insurance_type or "all",
+        "team_options": team_options,
+        "team": team or "all",
+        "rm_options": rm_options,
+        "rm": rm or "all",
     }
 
 
