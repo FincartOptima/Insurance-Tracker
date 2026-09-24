@@ -80,6 +80,7 @@ def api_renewals():
             conn,
             bucket=request.args.get("bucket", "next7"),
             search=request.args.get("q", ""),
+            insurance_type=request.args.get("type", "all"),
         )
     finally:
         conn.close()

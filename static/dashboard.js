@@ -83,9 +83,22 @@ function renewalWhatsApp(r) {
 }
 
 async function refresh() {
-  const params = new URLSearchParams({ bucket: currentBucket, q: $("search").value });
+  const params = new URLSearchParams({
+    bucket: currentBucket,
+    q: $("search").value,
+    type: $("type-filter").value,
+  });
   const res = await fetch("/api/renewals?" + params.toString());
   const d = await res.json();
+
+  const typeSelect = $("type-filter");
+  const currentOptions = [...typeSelect.options].map((o) => o.value).join(",");
+  const freshOptions = ["all", ...d.type_options].join(",");
+  if (currentOptions !== freshOptions) {
+    typeSelect.innerHTML = `<option value="all">All policy types</option>` +
+      d.type_options.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join("");
+    typeSelect.value = d.insurance_type;
+  }
 
   $("c-overdue").textContent = d.counts.overdue;
   $("c-tomorrow").textContent = d.counts.tomorrow;
@@ -240,5 +253,7 @@ $("search").addEventListener("input", () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(refresh, 250);
 });
+
+$("type-filter").addEventListener("change", refresh);
 
 refresh();

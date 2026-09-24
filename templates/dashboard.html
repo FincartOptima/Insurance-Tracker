@@ -35,7 +35,12 @@
 <section class="panel">
   <div class="panel-head">
     <h2 id="table-title">Next 7 Days</h2>
-    <input type="search" id="search" placeholder="Search client name&hellip;">
+    <div class="panel-filters">
+      <select id="type-filter">
+        <option value="all">All policy types</option>
+      </select>
+      <input type="search" id="search" placeholder="Search client name&hellip;">
+    </div>
   </div>
   <div class="table-scroll">
     <table id="table">

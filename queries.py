@@ -60,13 +60,20 @@ def _row_out(r, days):
     }
 
 
-def build(conn, bucket, search):
+def build(conn, bucket, search, insurance_type="all"):
     if bucket not in BUCKET_LABELS:
         bucket = "next7"
 
     with conn.cursor() as cur:
         cur.execute("SELECT * FROM renewals")
         rows = cur.fetchall()
+
+    # Every type present across ALL data, regardless of the current filter,
+    # so the dropdown's option list never shrinks just because a filter is active.
+    type_options = sorted({r["insurance_type"] for r in rows if r["insurance_type"]})
+
+    if insurance_type and insurance_type != "all":
+        rows = [r for r in rows if r["insurance_type"] == insurance_type]
 
     today = dt.date.today()
     enriched = []
@@ -77,6 +84,7 @@ def build(conn, bucket, search):
 
     # Computed through the same _in_bucket used for the table, so the card
     # counts can never drift out of sync with what selecting that card shows.
+    # Reflects the type filter (if any), same as the table does.
     counts = {
         b: sum(1 for _, days in enriched if _in_bucket(days, b))
         for b in ("overdue", "tomorrow", "next2", "next7", "next30")
@@ -97,6 +105,8 @@ def build(conn, bucket, search):
         "bucket_label": BUCKET_LABELS[bucket],
         "rows": table,
         "as_of": today.isoformat(),
+        "type_options": type_options,
+        "insurance_type": insurance_type or "all",
     }
 
 
