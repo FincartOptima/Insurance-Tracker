@@ -1,74 +1,47 @@
 {% extends "base.html" %}
-{% block title %}Dashboard{% endblock %}
-
+{% block title %}Renewals{% endblock %}
 {% block content %}
-{% if total == 0 %}
-  <div class="empty">
-    <h1>Nothing to show yet</h1>
-    <p>Upload an insurance export to start tracking renewals.</p>
-    <a class="primary" href="{{ url_for('upload') }}">Go to upload</a>
-  </div>
-{% else %}
-
-<div class="bucket-cards" id="bucket-cards">
-  <button class="bcard" data-bucket="overdue">
-    <label>Overdue</label><span id="c-overdue">&mdash;</span>
-  </button>
-  <button class="bcard" data-bucket="tomorrow">
-    <label>Next Day</label><span id="c-tomorrow">&mdash;</span>
-  </button>
-  <button class="bcard" data-bucket="next2">
-    <label>Next 2 Days</label><span id="c-next2">&mdash;</span>
-  </button>
-  <button class="bcard active" data-bucket="next7">
-    <label>Next 7 Days</label><span id="c-next7">&mdash;</span>
-  </button>
-  <button class="bcard" data-bucket="next30">
-    <label>Next 30 Days</label><span id="c-next30">&mdash;</span>
-  </button>
-  <button class="bcard muted" data-bucket="all">
-    <label>All upcoming</label><span>&rarr;</span>
-  </button>
+<div class="page-heading">
+  <div><p class="eyebrow">POLICY MANAGEMENT</p><h1>Renewals</h1><p class="lede">Know what’s due. Keep every client covered.</p></div>
+  <div class="heading-actions"><a class="secondary" href="{{ url_for('upload') }}">Import data</a>{% if total %}<button id="export" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4"/></svg><span>Download Excel</span></button>{% endif %}</div>
 </div>
-<p class="asof" id="asof"></p>
-
-<section class="panel">
-  <div class="panel-head">
-    <h2 id="table-title">Next 7 Days</h2>
-    <div class="panel-filters">
-      <select id="team-filter">
-        <option value="all">All teams</option>
-      </select>
-      <select id="rm-filter">
-        <option value="all">All RMs</option>
-      </select>
-      <select id="type-filter">
-        <option value="all">All policy types</option>
-      </select>
-      <input type="search" id="search" placeholder="Search client name&hellip;">
-    </div>
-  </div>
-  <div class="table-scroll">
-    <table id="table">
-      <thead>
-        <tr>
-          <th>Renews</th><th>Client</th><th>Email</th><th>RM</th><th>Team</th>
-          <th>Policy</th><th>Partner</th><th>Type</th>
-          <th>Sum Insured</th><th>Premium</th><th>Policy No</th>
-          <th>Status</th><th>Reschedule</th><th>Remarks</th><th>Contact</th>
-        </tr>
-      </thead>
-      <tbody id="table-body"></tbody>
-    </table>
-  </div>
-  <p class="empty-row" id="empty-row" style="display:none;">No renewals in this window.</p>
+{% if total == 0 %}
+<section class="empty card"><div class="empty-symbol" aria-hidden="true">↥</div><h2>Your renewal workspace starts here</h2><p>Import your insurance export to see upcoming dates, manage follow-ups<br>and download filtered client lists.</p><a class="primary" href="{{ url_for('upload') }}">Import your first file</a></section>
+{% else %}
+<noscript><p class="notice error">Enable JavaScript to view and filter renewals.</p></noscript>
+<section class="bucket-cards" aria-label="Quick renewal timelines">
+  {% for key, label, note in [('overdue','Overdue','Past the renewal date'),('today','Due today','Renewing today'),('next7','Next 7 days','Today + 7 days ahead'),('next30','Next 30 days','Today + 30 days ahead')] %}
+  <button class="bcard{% if key == 'next7' %} active{% endif %}" data-bucket="{{ key }}" aria-pressed="{{ 'true' if key == 'next7' else 'false' }}"><span class="metric-label"><i class="metric-dot {{ key }}" aria-hidden="true"></i>{{ label }}<span class="card-arrow" aria-hidden="true">↗</span></span><strong id="c-{{ key }}">—</strong><small>{{ note }}</small></button>
+  {% endfor %}
 </section>
-
+<div class="context-line"><p id="asof">Loading renewal data…</p><p>Counts reflect your search and team filters; windows overlap.</p></div>
+<section class="panel filters-panel" aria-labelledby="filter-heading">
+  <div class="filter-heading"><h2 id="filter-heading">Find renewals</h2><button class="text-button" id="clear-filters" type="button">Reset filters</button></div>
+  <form id="filters">
+    <div class="filter-grid">
+      <div class="filter-field search-field"><label for="search">Search clients or policies</label><div class="search-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg><input type="search" id="search" placeholder="Name, policy no., email or phone"></div></div>
+      <div class="filter-field"><label for="timeline">Renewal timeline</label><select id="timeline"><option value="overdue">Overdue</option><option value="today">Due today</option><option value="tomorrow">Today &amp; tomorrow</option><option value="next2">Next 2 days</option><option value="next7" selected>Next 7 days</option><option value="next14">Next 14 days</option><option value="next30">Next 30 days</option><option value="next60">Next 60 days</option><option value="next90">Next 90 days</option><option value="custom">Custom date range</option><option value="upcoming">All upcoming</option><option value="all">All policies</option><option value="no_date">Missing renewal date</option></select></div>
+      <div class="filter-field"><label for="team-filter">Team</label><select id="team-filter"><option value="all">All teams</option></select></div>
+      <div class="filter-field"><label for="rm-filter">Relationship manager</label><select id="rm-filter"><option value="all">All managers</option></select></div>
+      <div class="filter-field"><label for="type-filter">Policy type</label><select id="type-filter"><option value="all">All types</option></select></div>
+      <div class="filter-field"><label for="status-filter">Follow-up</label><select id="status-filter"><option value="all">All statuses</option><option value="Not Done">Pending</option><option value="Done">Done</option></select></div>
+    </div>
+    <div class="custom-range" id="custom-range" hidden><div class="filter-field"><label for="start-date">From</label><input id="start-date" type="date"></div><div class="filter-field"><label for="end-date">To</label><input id="end-date" type="date"></div><button type="submit" class="secondary">Apply dates</button><span>Both dates are included.</span></div>
+  </form>
+</section>
+<div class="notice error" id="error" role="alert" hidden></div>
+<div class="date-notice" id="date-notice" hidden><span id="missing-date-copy"></span><button type="button" class="text-button" id="show-undated">Review policies</button></div>
+<section class="panel results-panel" id="results" aria-labelledby="table-title" aria-busy="true">
+  <div class="results-head"><div><div class="results-title"><h2 id="table-title">Next 7 days</h2><span class="count-badge" id="result-count">—</span></div><p id="results-caption" role="status">Loading policies…</p></div><div class="premium-summary"><span>Premium in this view</span><strong id="premium-total">—</strong></div></div>
+  <div class="table-scroll" tabindex="0" aria-label="Renewal policies">
+    <table><thead><tr><th scope="col">Client &amp; policy</th><th scope="col">Renewal date</th><th scope="col">Insurer &amp; plan</th><th scope="col">Relationship manager</th><th scope="col" class="numeric">Premium</th><th scope="col">Follow-up</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody id="table-body"></tbody></table>
+  </div>
+  <div class="empty-row" id="empty-row" hidden><h3>No policies match these filters</h3><p>Try a wider renewal timeline or reset your filters.</p><button class="secondary" id="empty-reset">Reset filters</button></div>
+  <div class="table-footer"><span id="page-info">Loading…</span><div class="pagination"><label for="page-size">Rows</label><select id="page-size"><option>25</option><option>50</option><option>100</option></select><button class="secondary" id="prev-page" aria-label="Previous page" disabled>←</button><button class="secondary" id="next-page" aria-label="Next page" disabled>→</button></div></div>
+</section>
+<p class="export-note">Excel includes all matching policies across every page, with complete stored client details.</p>
+<dialog id="detail-dialog" aria-labelledby="detail-name"><div class="drawer-head"><div><p class="eyebrow">CLIENT &amp; POLICY</p><h2 id="detail-name"></h2><p class="muted mono" id="detail-policy-no"></p></div><button type="button" class="icon-button" id="close-detail" aria-label="Close client details">×</button></div><div class="drawer-content"><div id="detail-facts"></div><div class="contact-actions"><a class="secondary" id="detail-email">Draft email</a><a class="secondary" id="detail-whatsapp" target="_blank" rel="noopener noreferrer">Open WhatsApp</a></div><p class="small muted">Opens a prepared message for you to review and send.</p><form id="detail-form"><h3>Follow-up details</h3><div class="detail-form-grid"><div class="filter-field"><label for="detail-status">Follow-up status</label><select id="detail-status"><option value="Not Done">Pending</option><option value="Done">Done</option></select></div><div class="filter-field"><label for="detail-date">Renewal / rescheduled date</label><input type="date" id="detail-date"></div></div><div class="filter-field"><label for="detail-phone">Client phone</label><input type="tel" id="detail-phone" maxlength="40" placeholder="Phone with country code"></div><div class="filter-field"><label for="detail-remarks">Remarks</label><textarea id="detail-remarks" rows="4" maxlength="2000" placeholder="Record your latest conversation or next step"></textarea></div><p class="small muted">Changing the date moves this policy to its new renewal window.</p><p id="save-message" role="status"></p><div class="drawer-actions"><button type="button" class="secondary" id="cancel-detail">Cancel</button><button type="submit" id="save-detail">Save changes</button></div></form></div></dialog>
+<div id="toast" role="status" class="toast" hidden></div>
 {% endif %}
 {% endblock %}
-
-{% block scripts %}
-{% if total > 0 %}
-<script src="{{ url_for('static', filename='dashboard.js') }}"></script>
-{% endif %}
-{% endblock %}
+{% block scripts %}{% if total > 0 %}<script src="{{ url_for('static', filename='dashboard.js') }}" defer></script>{% endif %}{% endblock %}

@@ -2,13 +2,8 @@
 {% block title %}Upload{% endblock %}
 
 {% block content %}
-<h1>Upload data</h1>
-<p class="lede">
-  Each Insurance export is added to the stored history and matched on Policy No,
-  so re-uploading is safe and never creates duplicates. Only <strong>Confirmed</strong>
-  rows are kept, and renewal dates come from <code>NextPremimum_Date</code>.
-</p>
-
+<div class="page-heading"><div><p class="eyebrow">DATA MANAGEMENT</p><h1>Import policy data</h1><p class="lede">Keep your renewal workspace up to date with the latest insurance export.</p></div><a class="secondary" href="{{ url_for('dashboard') }}">Back to renewals</a></div>
+<div class="upload-grid">
 <form method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" class="card">
   <div class="field">
     <label for="insurance">Insurance export</label>
@@ -24,6 +19,8 @@
   </div>
   <button type="submit" class="primary">Upload &amp; process</button>
 </form>
+<aside class="card import-help"><h2>A simple, repeatable update</h2><ol><li>Choose your insurance export in .xls or .xlsx format (up to 16 MB per request).</li><li>Add an employee reference when your managers or teams change.</li><li>Import the files, review the summary, and return to renewals.</li></ol><p>Only confirmed policies are included. Existing policy numbers are updated, so repeat imports do not create duplicates.</p></aside></div>
+
 
 <div class="status-line">
   <span><strong>{{ total }}</strong> policies stored</span>
@@ -59,7 +56,7 @@
   </div>
 
   {% if result.no_date %}
-    <p class="notice warn">{{ result.no_date }} stored polic{{ 'y has' if result.no_date == 1 else 'ies have' }} no NextPremimum_Date, so they can never appear in a bucket below.</p>
+    <p class="notice warn">{{ result.no_date }} stored polic{{ 'y has' if result.no_date == 1 else 'ies have' }} no NextPremimum_Date, so they appear under “Missing renewal date” on the dashboard.</p>
   {% endif %}
 
   {% if result.conflicts %}
@@ -85,8 +82,8 @@
 </div>
 {% endif %}
 
-<form method="post" action="{{ url_for('reset') }}" class="danger-zone"
+<details class="danger-zone"><summary>Advanced: clear stored policy data</summary><p class="small muted">This permanently removes all stored policies and follow-up details.</p><form method="post" action="{{ url_for('reset') }}"
       onsubmit="return confirm('Delete all stored renewal data? This cannot be undone.');">
   <button type="submit" class="danger">Clear all stored data</button>
-</form>
+</form></details>
 {% endblock %}

@@ -5,11 +5,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from flask import Flask, flash, jsonify, redirect, render_template, request, url_for  # noqa: E402
+from flask import Flask, flash, jsonify, redirect, render_template, request, url_for, send_file  # noqa: E402
 
 import db  # noqa: E402
 import ingest  # noqa: E402
 import queries  # noqa: E402
+import exports  # noqa: E402
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "health-ops-renewal-tracker")
@@ -86,29 +87,52 @@ def upload():
     return _render_upload_page(result=result, employee_result=employee_result)
 
 
-@app.route("/api/renewals")
-def api_renewals():
+def _filtered_renewals():
     conn = db.connect()
     try:
-        data = queries.build(
-            conn,
-            bucket=request.args.get("bucket", "next7"),
-            search=request.args.get("q", ""),
-            insurance_type=request.args.get("type", "all"),
-            team=request.args.get("team", "all"),
-            rm=request.args.get("rm", "all"),
+        return queries.build(
+            conn, bucket=request.args.get("bucket", "next7"),
+            search=request.args.get("q", ""), insurance_type=request.args.get("type", "all"),
+            team=request.args.get("team", "all"), rm=request.args.get("rm", "all"),
+            status=request.args.get("status", "all"), start=request.args.get("start"),
+            end=request.args.get("end"),
         )
     finally:
         conn.close()
-    return jsonify(data)
 
 
-@app.route("/api/renewals/<policy_no>", methods=["PATCH"])
+@app.route("/api/renewals")
+def api_renewals():
+    try:
+        return jsonify(_filtered_renewals())
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@app.route("/api/renewals/export")
+def export_renewals():
+    try:
+        data = _filtered_renewals()
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    response = send_file(
+        exports.workbook(data), as_attachment=True,
+        download_name=f"renewals-{data['bucket']}-{data['as_of']}.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.route("/api/renewals/<path:policy_no>", methods=["PATCH"])
 def update_renewal(policy_no):
     data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"error": "Expected an object."}), 400
     conn = db.connect()
     try:
-        result = queries.update_field(conn, policy_no, data.get("field"), data.get("value"))
+        result = (queries.update_fields(conn, policy_no, data["fields"]) if "fields" in data
+                  else queries.update_field(conn, policy_no, data.get("field"), data.get("value")))
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     finally:

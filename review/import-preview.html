@@ -1,4 +1,11 @@
-:root {
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Upload · Fincart</title>
+<style>:root {
   color-scheme: light;
   --bg: #f5f7fa;
   --surface: #fff;
@@ -1120,3 +1127,59 @@ code {
       border-color 0.12s;
   }
 }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="topbar">
+  <a class="brand" href="redesign-preview.html" aria-label="Fincart Renewal Tracker home"><span class="brand-mark" aria-hidden="true">f.</span><span>fincart<span class="brand-product">Insurance operations</span></span></a>
+  <nav aria-label="Main navigation">
+    <a href="redesign-preview.html" >Renewals</a>
+    <a href="import-preview.html" class="active" aria-current="page">Import data</a>
+  </nav>
+  <span class="workspace-label">Design preview · Sample data</span>
+</header>
+<main id="main">
+  
+    
+  
+  
+<div class="page-heading"><div><p class="eyebrow">DATA MANAGEMENT</p><h1>Import policy data</h1><p class="lede">Keep your renewal workspace up to date with the latest insurance export.</p></div><a class="secondary" href="redesign-preview.html">Back to renewals</a></div>
+<div class="upload-grid">
+<form method="post" action="/upload" enctype="multipart/form-data" class="card">
+  <div class="field">
+    <label for="insurance">Insurance export</label>
+    <input type="file" name="insurance" id="insurance" accept=".xls,.xlsx">
+    <small>Any Insurance_YYYY_MM_DD export.</small>
+  </div>
+  <div class="field">
+    <label for="employee_ref">Employee reference (RM &rarr; Team)
+      <span class="warn-tag">not uploaded yet</span>
+    </label>
+    <input type="file" name="employee_ref" id="employee_ref" accept=".xls,.xlsx">
+    <small>Needs Team and Name columns. Only needed once, or when RMs/teams change &mdash; re-uploading re-checks every stored policy.</small>
+  </div>
+  <button type="submit" class="primary">Upload &amp; process</button>
+</form>
+<aside class="card import-help"><h2>A simple, repeatable update</h2><ol><li>Choose your insurance export in .xls or .xlsx format (up to 16 MB per request).</li><li>Add an employee reference when your managers or teams change.</li><li>Import the files, review the summary, and return to renewals.</li></ol><p>Only confirmed policies are included. Existing policy numbers are updated, so repeat imports do not create duplicates.</p></aside></div>
+
+
+<div class="status-line">
+  <span><strong>70</strong> policies stored</span>
+  
+  
+</div>
+
+
+
+
+
+<details class="danger-zone"><summary>Advanced: clear stored policy data</summary><p class="small muted">This permanently removes all stored policies and follow-up details.</p><form method="post" action="/reset"
+     >
+  <button type="submit" class="danger">Clear all stored data</button>
+</form></details>
+
+</main>
+
+<script>document.querySelectorAll('form').forEach(form=>form.addEventListener('submit',e=>{e.preventDefault();alert('Design preview only. Run the Flask application to manage data.')}))</script></body>
+</html>
