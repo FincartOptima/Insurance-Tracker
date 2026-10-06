@@ -217,6 +217,28 @@ button.danger:hover:not(:disabled) { background: var(--red-bg); }
 code { font-size: 12px; background: var(--bg); padding: 2px 5px; border-radius: 3px; }
 .notice summary { cursor: pointer; }
 .notice ul { padding-left: 20px; }
+/* The Overview overdue table has different columns from the tracker. */
+.filter-heading-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+#od-filters { padding: 0 0 18px; margin-bottom: 18px; border-bottom: 1px solid var(--line); }
+#od-filters .search-field { max-width: none; grid-column: 1/-1; }
+#od-filters .filter-grid { grid-template-columns: repeat(5,minmax(0,1fr)); padding-top: 0; }
+#od-error { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+#od-caption { margin-bottom: 14px; }
+#overdue-section[aria-busy="true"] tbody { opacity: .4; }
+.overdue-table th:nth-child(1) { width: 19%; }
+.overdue-table th:nth-child(2) { width: 18%; }
+.overdue-table th:nth-child(3) { width: 12%; }
+.overdue-table th:nth-child(4) { width: 14%; }
+.overdue-table th:nth-child(5) { width: 15%; }
+.overdue-table th:nth-child(6) { width: 13%; }
+.overdue-table th:nth-child(7) { width: 9%; }
+.overdue-table td:last-child { white-space: nowrap; overflow-wrap: normal; }
+@media (max-width: 1180px) { #od-filters .filter-grid { grid-template-columns: repeat(3,minmax(0,1fr)); } }
+@media (max-width: 600px) {
+  #overdue-section .filter-heading { align-items: flex-start; flex-direction: column; }
+  #overdue-section .filter-heading-actions { width: 100%; justify-content: space-between; gap: 10px; }
+  #od-filters .filter-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
 /* Branded opening: actual supplied logo, animated ring, readiness-driven exit. */
 .is-loading { overflow: hidden; }
 .loading-screen { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: #f7f9fd; opacity: 1; transition: opacity .24s ease; }

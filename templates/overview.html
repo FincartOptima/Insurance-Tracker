@@ -40,15 +40,30 @@
   </section>
 </div>
 
-<section class="panel" id="overdue-section">
+<section class="panel" id="overdue-section" aria-busy="true" aria-labelledby="overdue-heading">
   <div class="filter-heading">
-    <h2>Overdue policies</h2>
-    <button class="text-button" id="clear-team-pick" type="button" hidden>Showing <span id="picked-team"></span> only &middot; Clear</button>
+    <h2 id="overdue-heading">Overdue policies</h2>
+    <div class="filter-heading-actions">
+      <button class="secondary" id="od-export" type="button" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4"/></svg><span>Download Excel</span></button>
+      <button class="text-button" id="od-clear-filters" type="button">Reset filters</button>
+    </div>
   </div>
-  <p class="small muted">Click a bar to see just that team's overdue policies below.</p>
+  <div class="notice error" id="od-error" role="alert" hidden><span id="od-error-message"></span><button class="text-button" id="od-retry" type="button">Try again</button></div>
+  <form id="od-filters">
+    <div class="filter-grid">
+      <div class="filter-field search-field"><label for="od-search">Search clients or policies</label><div class="search-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg><input type="search" id="od-search" placeholder="Name, policy no., email or phone"></div></div>
+      <div class="filter-field"><label for="od-month-filter">Renewal month</label><select id="od-month-filter"><option value="all">All months</option></select></div>
+      <div class="filter-field"><label for="od-team-filter">Team</label><select id="od-team-filter"><option value="all">All teams</option></select></div>
+      <div class="filter-field"><label for="od-rm-filter">Relationship manager</label><select id="od-rm-filter"><option value="all">All managers</option></select></div>
+      <div class="filter-field"><label for="od-type-filter">Policy type</label><select id="od-type-filter"><option value="all">All types</option></select></div>
+      <div class="filter-field"><label for="od-status-filter">Follow-up</label><select id="od-status-filter"><option value="all">All statuses</option><option value="Not Done">Pending</option><option value="Done">Done</option></select></div>
+    </div>
+  </form>
+  <p id="od-caption" class="small muted" role="status">Loading overdue policies…</p>
+  <p class="small muted">Click a bar to filter by team too &mdash; it stays in sync with the Team filter above.</p>
   <div class="chart-wrap" style="min-height: 280px;"><canvas id="overdue-team-chart"></canvas></div>
   <div class="table-scroll">
-    <table>
+    <table class="overdue-table">
       <thead><tr>
         <th scope="col">Client &amp; policy</th><th scope="col">Email</th><th scope="col">Phone</th>
         <th scope="col">RM &amp; team</th><th scope="col">Insurer &amp; plan</th>

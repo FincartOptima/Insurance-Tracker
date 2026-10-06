@@ -21,59 +21,39 @@ function plainDate(iso) {
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
 }
 
+function fmtDays(d) {
+  if (d === null || d === undefined) return "";
+  return `${Math.abs(d)}d overdue`;
+}
+
 const charts = {};
 function render(id, config) {
   if (charts[id]) charts[id].destroy();
   charts[id] = new Chart($(id), config);
 }
 
-let overduePolicies = [];
-let overdueTeamOrder = [];
-let pickedTeam = null;
-let overduePage = 1;
-const OVERDUE_PAGE_SIZE = 25;
-
-function fmtDays(d) {
-  if (d === null || d === undefined) return "";
-  return `${Math.abs(d)}d overdue`;
+function syncOptions(id, label, options, selectedValue) {
+  const select = $(id);
+  select.replaceChildren(
+    new Option(label, "all"),
+    ...options.map((v) => new Option(v, v)),
+  );
+  select.value = selectedValue;
+}
+function syncMonthOptions(id, options, selectedValue) {
+  const select = $(id);
+  const fmt = (ym) => {
+    const [y, m] = ym.split("-");
+    return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+  };
+  select.replaceChildren(
+    new Option("All months", "all"),
+    ...options.map((ym) => new Option(fmt(ym), ym)),
+  );
+  select.value = selectedValue;
 }
 
-function renderOverdueTable() {
-  const rows = pickedTeam ? overduePolicies.filter((r) => r.team === pickedTeam) : overduePolicies;
-  const start = (overduePage - 1) * OVERDUE_PAGE_SIZE;
-  const visible = rows.slice(start, start + OVERDUE_PAGE_SIZE);
-
-  $("overdue-table-body").innerHTML = visible.map((r) => `
-    <tr>
-      <td><span class="primary-text">${esc(r.client_name) || "Unnamed client"}</span><small>${esc(r.policy_no)} · ${fmtDays(r.days_until)}</small></td>
-      <td>${esc(r.client_email) || "—"}</td>
-      <td>${esc(r.phone) || "—"}</td>
-      <td><span class="primary-text">${esc(r.rm_name) || "Unassigned"}</span><small>${esc(r.team)}</small></td>
-      <td><span class="primary-text">${esc(r.policy_partner)}</span><small>${esc(r.policy) || "—"}</small></td>
-      <td>${r.last_renewal_date ? plainDate(r.last_renewal_date) : "—"}</td>
-      <td class="numeric">${compact(r.premium_amount)}</td>
-    </tr>`).join("") ||
-    `<tr><td colspan="7">No overdue policies${pickedTeam ? " for " + esc(pickedTeam) : ""}.</td></tr>`;
-
-  $("overdue-page-info").textContent = rows.length
-    ? `Showing ${Math.min(start + 1, rows.length)}–${Math.min(start + OVERDUE_PAGE_SIZE, rows.length)} of ${rows.length} overdue polic${rows.length === 1 ? "y" : "ies"}`
-    : "0 policies";
-  $("overdue-prev").disabled = overduePage <= 1;
-  $("overdue-next").disabled = start + OVERDUE_PAGE_SIZE >= rows.length;
-
-  $("clear-team-pick").hidden = !pickedTeam;
-  $("picked-team").textContent = pickedTeam || "";
-}
-
-function pickTeam(team) {
-  pickedTeam = pickedTeam === team ? null : team;
-  overduePage = 1;
-  renderOverdueTable();
-}
-
-$("overdue-prev").addEventListener("click", () => { overduePage--; renderOverdueTable(); });
-$("overdue-next").addEventListener("click", () => { overduePage++; renderOverdueTable(); });
-$("clear-team-pick").addEventListener("click", () => { pickedTeam = null; overduePage = 1; renderOverdueTable(); });
+/* --- portfolio-wide summary: KPI cards, team overdue/upcoming, type & insurer mix --- */
 
 async function refresh() {
   $("overview-error").hidden = true;
@@ -110,27 +90,6 @@ async function refresh() {
       plugins: { legend: { position: "bottom" } },
     },
   });
-
-  overduePolicies = data.overdue_policies;
-  overdueTeamOrder = teams.filter((t) => t.overdue > 0).map((t) => t.team);
-  if (pickedTeam && !overdueTeamOrder.includes(pickedTeam)) pickedTeam = null;
-  render("overdue-team-chart", {
-    type: "bar",
-    data: {
-      labels: overdueTeamOrder,
-      datasets: [{ label: "Overdue", data: overdueTeamOrder.map((t) => teams.find((x) => x.team === t).overdue),
-                   backgroundColor: overdueTeamOrder.map((t) => t === pickedTeam ? "#102a56" : "#1747bd") }],
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      onClick: (evt, elements) => { if (elements.length) pickTeam(overdueTeamOrder[elements[0].index]); },
-      onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length ? "pointer" : "default"; },
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
-    },
-  });
-  overduePage = 1;
-  renderOverdueTable();
 
   const types = data.business_type;
   render("type-chart", {
@@ -174,10 +133,179 @@ async function refresh() {
   } catch (error) {
     $('overview-error').hidden = false;
     $('ov-asof').textContent = 'Portfolio data is unavailable.';
-  } finally {
-    window.FincartLoader?.finish();
   }
 }
 
+/* --- Overdue policies: filterable the same way as the renewal tracker --- */
+
+let overduePolicies = [];
+let overduePage = 1;
+const OVERDUE_PAGE_SIZE = 25;
+let odSearchTimer = null;
+let odRequestId = 0;
+let odController = null;
+let odAppliedParams = null;
+let odExporting = false;
+
+function odSetError(message) {
+  $('od-error-message').textContent = message;
+  $('od-error').hidden = !message;
+}
+function odMarkPending() {
+  odRequestId++;
+  if (odController) odController.abort();
+  $('od-export').disabled = true;
+  $('overdue-section').setAttribute('aria-busy', 'true');
+  $('od-caption').textContent = 'Updating overdue policies…';
+}
+function odSyncExport() {
+  $('od-export').disabled = odExporting || !overduePolicies.length ||
+    $('overdue-section').getAttribute('aria-busy') === 'true' ||
+    !odAppliedParams || odAppliedParams.toString() !== odParams().toString() ||
+    !$('od-error').hidden;
+}
+
+function odParams() {
+  return new URLSearchParams({
+    bucket: "overdue",
+    q: $("od-search").value.trim(),
+    month: $("od-month-filter").value,
+    team: $("od-team-filter").value,
+    rm: $("od-rm-filter").value,
+    type: $("od-type-filter").value,
+    status: $("od-status-filter").value,
+  });
+}
+
+async function refreshOverdue() {
+  clearTimeout(odSearchTimer);
+  odMarkPending();
+  const id = odRequestId;
+  odController = new AbortController();
+  const params = odParams();
+  odSetError('');
+  try {
+    const res = await fetch('/api/renewals?' + params, { cache: 'no-store', signal: odController.signal });
+    if (!res.ok) throw new Error('Could not load overdue policies. Please try again.');
+    const data = await res.json();
+    if (id !== odRequestId) return;
+
+  syncOptions("od-team-filter", "All teams", data.team_options, data.team);
+  syncOptions("od-rm-filter", "All managers", data.rm_options, data.rm);
+  syncOptions("od-type-filter", "All types", data.type_options, data.insurance_type);
+  syncMonthOptions("od-month-filter", data.month_options, data.month);
+
+  overduePolicies = data.rows;
+  overduePage = 1;
+  odAppliedParams = new URLSearchParams(params);
+
+  const teamCounts = {};
+  for (const r of overduePolicies) teamCounts[r.team] = (teamCounts[r.team] || 0) + 1;
+  const teamOrder = Object.keys(teamCounts).sort((a, b) => teamCounts[b] - teamCounts[a]);
+  const activeTeam = $("od-team-filter").value;
+
+  render("overdue-team-chart", {
+    type: "bar",
+    data: {
+      labels: teamOrder,
+      datasets: [{ label: "Overdue", data: teamOrder.map((t) => teamCounts[t]),
+                   backgroundColor: teamOrder.map((t) => t === activeTeam ? "#102a56" : "#1747bd") }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      onClick: (evt, elements) => {
+        if (!elements.length) return;
+        const team = teamOrder[elements[0].index];
+        $("od-team-filter").value = $("od-team-filter").value === team ? "all" : team;
+        refreshOverdue();
+      },
+      onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length ? "pointer" : "default"; },
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+    },
+  });
+
+  renderOverdueTable();
+  $('od-caption').textContent = `${overduePolicies.length} matching overdue ${overduePolicies.length === 1 ? 'policy' : 'policies'} · Earliest renewal first`;
+  } catch (error) {
+    if (id !== odRequestId || error.name === 'AbortError') return;
+    odSetError(error.message || 'Could not load overdue policies. Please try again.');
+    $('od-caption').textContent = 'Results could not be updated. Previous results may remain below.';
+  } finally {
+    if (id === odRequestId) {
+      $('overdue-section').setAttribute('aria-busy', 'false');
+      odSyncExport();
+    }
+  }
+}
+
+function renderOverdueTable() {
+  const start = (overduePage - 1) * OVERDUE_PAGE_SIZE;
+  const visible = overduePolicies.slice(start, start + OVERDUE_PAGE_SIZE);
+
+  $("overdue-table-body").innerHTML = visible.map((r) => `
+    <tr>
+      <td><span class="primary-text">${esc(r.client_name) || "Unnamed client"}</span><small>${esc(r.policy_no)} · ${fmtDays(r.days_until)}</small></td>
+      <td>${esc(r.client_email) || "—"}</td>
+      <td>${esc(r.phone) || "—"}</td>
+      <td><span class="primary-text">${esc(r.rm_name) || "Unassigned"}</span><small>${esc(r.team)}</small></td>
+      <td><span class="primary-text">${esc(r.policy_partner)}</span><small>${esc(r.policy) || "—"}</small></td>
+      <td>${r.next_premium_date ? plainDate(r.next_premium_date) : "—"}</td>
+      <td class="numeric">${compact(r.premium_amount)}</td>
+    </tr>`).join("") ||
+    `<tr><td colspan="7">No overdue policies match these filters.</td></tr>`;
+
+  const total = overduePolicies.length;
+  $("overdue-page-info").textContent = total
+    ? `Showing ${Math.min(start + 1, total)}–${Math.min(start + OVERDUE_PAGE_SIZE, total)} of ${total} overdue polic${total === 1 ? "y" : "ies"}`
+    : "0 policies";
+  $("overdue-prev").disabled = overduePage <= 1;
+  $("overdue-next").disabled = start + OVERDUE_PAGE_SIZE >= total;
+}
+
+$("overdue-prev").addEventListener("click", () => { overduePage--; renderOverdueTable(); });
+$("overdue-next").addEventListener("click", () => { overduePage++; renderOverdueTable(); });
+
+$("od-filters").addEventListener("submit", (e) => e.preventDefault());
+for (const id of ["od-month-filter", "od-team-filter", "od-rm-filter", "od-type-filter", "od-status-filter"])
+  $(id).addEventListener("change", refreshOverdue);
+$("od-search").addEventListener("input", () => {
+  clearTimeout(odSearchTimer);
+  odMarkPending();
+  odSearchTimer = setTimeout(refreshOverdue, 250);
+});
+$("od-clear-filters").addEventListener("click", () => { $("od-filters").reset(); refreshOverdue(); });
+
+$("od-export").addEventListener("click", async () => {
+  if ($("od-export").disabled || !odAppliedParams) return;
+  const params = new URLSearchParams(odAppliedParams);
+  odExporting = true;
+  const button = $("od-export"), label = button.querySelector("span");
+  button.disabled = true;
+  label.textContent = "Preparing Excel…";
+  try {
+    const res = await fetch("/api/renewals/export?" + params, { cache: "no-store" });
+    if (!res.ok) throw new Error("Excel could not be downloaded. Please try again.");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob),
+      a = document.createElement("a");
+    a.href = url;
+    const match = (res.headers.get("Content-Disposition") || "").match(/filename="?([^";]+)"?/);
+    a.download = match ? match[1] : "overdue-policies.xlsx";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (err) {
+    odSetError(err.message);
+  } finally {
+    label.textContent = "Download Excel";
+    odExporting = false;
+    odSyncExport();
+  }
+});
+
 $('overview-retry').addEventListener('click', refresh);
-refresh();
+$('od-retry').addEventListener('click', refreshOverdue);
+// Both independent requests must settle before the opening screen clears.
+Promise.allSettled([refresh(), refreshOverdue()]).finally(() => window.FincartLoader?.finish());
