@@ -7,7 +7,7 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
   const calls = [];
   const virtualConsole = new VirtualConsole();
   virtualConsole.on("jsdomError", (e) => errors.push(e.message));
-  const dom = await JSDOM.fromURL(base, {
+  const dom = await JSDOM.fromURL(base + "/tracker", {
     resources: "usable",
     runScripts: "dangerously",
     virtualConsole,
@@ -42,6 +42,14 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
   }
   await loaded();
   assert.equal($("error").hidden, true);
+  await delay(300);
+  assert.equal($("loading-screen").hidden, true);
+  assert.equal($("app-shell").inert, false);
+  $("toggle-filters").click();
+  assert.equal($("filter-options").hidden, true);
+  assert.equal($("toggle-filters").getAttribute("aria-expanded"), "false");
+  $("toggle-filters").click();
+  assert.equal($("filter-options").hidden, false);
   assert.equal($("table-body").rows.length, 25);
   assert.equal($("result-count").textContent, "30");
   $("next-page").click();
@@ -65,6 +73,7 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
   change("team-filter", "East");
   await loaded();
   assert.equal($("result-count").textContent, "3");
+  assert.equal($("filter-count").textContent, "2");
   change("search", "NO SUCH CLIENT", "input");
   await delay(350);
   await loaded();

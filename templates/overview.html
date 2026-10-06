@@ -2,19 +2,20 @@
 {% block title %}Overview{% endblock %}
 {% block content %}
 <div class="page-heading">
-  <div><p class="eyebrow">PORTFOLIO</p><h1>Overview</h1><p class="lede">Where renewals stand right now, across every team.</p></div>
+  <div><p class="eyebrow">PORTFOLIO</p><h1>Portfolio overview</h1><p class="lede">Where renewals stand right now, across every team.</p></div>
   <div class="heading-actions"><a class="secondary" href="{{ url_for('tracker') }}">Open renewal tracker</a></div>
 </div>
 
 {% if total == 0 %}
 <section class="empty card"><div class="empty-symbol" aria-hidden="true">↥</div><h2>Nothing to show yet</h2><p>Import your insurance export to see portfolio-wide renewal stats.</p><a class="primary" href="{{ url_for('upload') }}">Import your first file</a></section>
 {% else %}
+<div class="notice error" id="overview-error" role="alert" hidden><span>Unable to load your portfolio. Please try again.</span><button class="text-button" id="overview-retry" type="button">Try again</button></div>
 <noscript><p class="notice error">Enable JavaScript to view the overview.</p></noscript>
 
-<section class="bucket-cards" aria-label="Portfolio summary">
-  <div class="bcard" aria-hidden="true"><span class="metric-label"><i class="metric-dot overdue" aria-hidden="true"></i>Overdue</span><strong id="ov-overdue">—</strong><small>Already past the renewal date, not yet renewed</small></div>
-  <div class="bcard" aria-hidden="true"><span class="metric-label"><i class="metric-dot next30" aria-hidden="true"></i>Upcoming (30 days)</span><strong id="ov-upcoming">—</strong><small>Due in the next 30 days</small></div>
-  <div class="bcard" aria-hidden="true"><span class="metric-label"><i class="metric-dot all" aria-hidden="true"></i>Active policies</span><strong id="ov-active">—</strong><small>Excludes cancelled and already-renewed policies</small></div>
+<section class="bucket-cards portfolio-cards" aria-label="Portfolio summary">
+  <div class="bcard"><span class="metric-label"><i class="metric-dot overdue" aria-hidden="true"></i>Overdue</span><strong id="ov-overdue">—</strong><small>Already past the renewal date, not yet renewed</small></div>
+  <div class="bcard"><span class="metric-label"><i class="metric-dot next30" aria-hidden="true"></i>Upcoming (30 days)</span><strong id="ov-upcoming">—</strong><small>Due in the next 30 days</small></div>
+  <div class="bcard"><span class="metric-label"><i class="metric-dot all" aria-hidden="true"></i>Active policies</span><strong id="ov-active">—</strong><small>Excludes cancelled and already-renewed policies</small></div>
 </section>
 <div class="context-line"><p id="ov-asof">Loading…</p><p>Superseded policies (already renewed under a new number) are excluded everywhere here.</p></div>
 
@@ -39,14 +40,15 @@
   </section>
 </div>
 
-<section class="panel" id="overdue-section">
+<section class="panel" id="overdue-section" aria-busy="true" aria-labelledby="overdue-heading">
   <div class="filter-heading">
-    <h2>Overdue policies</h2>
+    <h2 id="overdue-heading">Overdue policies</h2>
     <div class="filter-heading-actions">
       <button class="secondary" id="od-export" type="button" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4"/></svg><span>Download Excel</span></button>
       <button class="text-button" id="od-clear-filters" type="button">Reset filters</button>
     </div>
   </div>
+  <div class="notice error" id="od-error" role="alert" hidden><span id="od-error-message"></span><button class="text-button" id="od-retry" type="button">Try again</button></div>
   <form id="od-filters">
     <div class="filter-grid">
       <div class="filter-field search-field"><label for="od-search">Search clients or policies</label><div class="search-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg><input type="search" id="od-search" placeholder="Name, policy no., email or phone"></div></div>
@@ -57,6 +59,7 @@
       <div class="filter-field"><label for="od-status-filter">Follow-up</label><select id="od-status-filter"><option value="all">All statuses</option><option value="Not Done">Pending</option><option value="Done">Done</option></select></div>
     </div>
   </form>
+  <p id="od-caption" class="small muted" role="status">Loading overdue policies…</p>
   <p class="small muted">Click a bar to filter by team too &mdash; it stays in sync with the Team filter above.</p>
   <div class="chart-wrap" style="min-height: 280px;"><canvas id="overdue-team-chart"></canvas></div>
   <div class="table-scroll">
@@ -79,4 +82,4 @@
 </section>
 {% endif %}
 {% endblock %}
-{% block scripts %}{% if total > 0 %}<script src="{{ url_for('static', filename='chart.min.js') }}"></script><script src="{{ url_for('static', filename='overview.js') }}" defer></script>{% endif %}{% endblock %}
+{% block scripts %}{% if total > 0 %}<script src="{{ url_for('static', filename='chart.min.js') }}"></script><script src="{{ url_for('static', filename='overview.js', v='blue-20261006') }}" defer></script>{% endif %}{% endblock %}

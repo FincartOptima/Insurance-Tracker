@@ -1,7 +1,7 @@
 const $ = (id) => document.getElementById(id);
 
-const PALETTE = ["#285f95", "#71a39a", "#c39749", "#ab413c", "#6b5ca5",
-                 "#3f8f6b", "#b06a8f", "#8a9eb4", "#c2884a", "#4a7fb5"];
+const PALETTE = ["#1747bd", "#568ef0", "#102a56", "#91b6f6", "#326ec9",
+                 "#b7cff5", "#1b518b", "#6ea8de", "#4163a1", "#d0e1fa"];
 
 function esc(s) {
   return (s || "").replace(/[&<>"']/g, (c) => (
@@ -56,8 +56,10 @@ function syncMonthOptions(id, options, selectedValue) {
 /* --- portfolio-wide summary: KPI cards, team overdue/upcoming, type & insurer mix --- */
 
 async function refresh() {
+  $("overview-error").hidden = true;
+  try {
   const res = await fetch("/api/overview", { cache: "no-store" });
-  if (!res.ok) return;
+  if (!res.ok) throw new Error("Unable to load portfolio");
   const data = await res.json();
 
   $("ov-overdue").textContent = data.total_overdue.toLocaleString("en-IN");
@@ -78,8 +80,8 @@ async function refresh() {
     data: {
       labels: teams.map((t) => t.team),
       datasets: [
-        { label: "Overdue", data: teams.map((t) => t.overdue), backgroundColor: "#ab413c" },
-        { label: "Upcoming (30d)", data: teams.map((t) => t.upcoming), backgroundColor: "#71a39a" },
+        { label: "Overdue", data: teams.map((t) => t.overdue), backgroundColor: "#1747bd" },
+        { label: "Upcoming (30d)", data: teams.map((t) => t.upcoming), backgroundColor: "#91b6f6" },
       ],
     },
     options: {
@@ -128,6 +130,10 @@ async function refresh() {
       scales: { x: { beginAtZero: true, ticks: { precision: 0 } } },
     },
   });
+  } catch (error) {
+    $('overview-error').hidden = false;
+    $('ov-asof').textContent = 'Portfolio data is unavailable.';
+  }
 }
 
 /* --- Overdue policies: filterable the same way as the renewal tracker --- */
@@ -138,6 +144,26 @@ const OVERDUE_PAGE_SIZE = 25;
 let odSearchTimer = null;
 let odRequestId = 0;
 let odController = null;
+let odAppliedParams = null;
+let odExporting = false;
+
+function odSetError(message) {
+  $('od-error-message').textContent = message;
+  $('od-error').hidden = !message;
+}
+function odMarkPending() {
+  odRequestId++;
+  if (odController) odController.abort();
+  $('od-export').disabled = true;
+  $('overdue-section').setAttribute('aria-busy', 'true');
+  $('od-caption').textContent = 'Updating overdue policies…';
+}
+function odSyncExport() {
+  $('od-export').disabled = odExporting || !overduePolicies.length ||
+    $('overdue-section').getAttribute('aria-busy') === 'true' ||
+    !odAppliedParams || odAppliedParams.toString() !== odParams().toString() ||
+    !$('od-error').hidden;
+}
 
 function odParams() {
   return new URLSearchParams({
@@ -152,24 +178,17 @@ function odParams() {
 }
 
 async function refreshOverdue() {
-  // Several triggers (filter change, bar click, reset) can fire refreshOverdue()
-  // in quick succession; without this guard a slower, superseded response can
-  // land after a faster, newer one and overwrite it with stale data.
-  odRequestId++;
+  clearTimeout(odSearchTimer);
+  odMarkPending();
   const id = odRequestId;
-  if (odController) odController.abort();
   odController = new AbortController();
-
   const params = odParams();
-  let data;
+  odSetError('');
   try {
-    const res = await fetch("/api/renewals?" + params, { cache: "no-store", signal: odController.signal });
-    if (!res.ok) return;
-    data = await res.json();
-  } catch (err) {
-    return;
-  }
-  if (id !== odRequestId) return;
+    const res = await fetch('/api/renewals?' + params, { cache: 'no-store', signal: odController.signal });
+    if (!res.ok) throw new Error('Could not load overdue policies. Please try again.');
+    const data = await res.json();
+    if (id !== odRequestId) return;
 
   syncOptions("od-team-filter", "All teams", data.team_options, data.team);
   syncOptions("od-rm-filter", "All managers", data.rm_options, data.rm);
@@ -178,7 +197,7 @@ async function refreshOverdue() {
 
   overduePolicies = data.rows;
   overduePage = 1;
-  $("od-export").disabled = overduePolicies.length === 0;
+  odAppliedParams = new URLSearchParams(params);
 
   const teamCounts = {};
   for (const r of overduePolicies) teamCounts[r.team] = (teamCounts[r.team] || 0) + 1;
@@ -190,7 +209,7 @@ async function refreshOverdue() {
     data: {
       labels: teamOrder,
       datasets: [{ label: "Overdue", data: teamOrder.map((t) => teamCounts[t]),
-                   backgroundColor: teamOrder.map((t) => t === activeTeam ? "#8a2f2a" : "#ab413c") }],
+                   backgroundColor: teamOrder.map((t) => t === activeTeam ? "#102a56" : "#1747bd") }],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
@@ -207,6 +226,17 @@ async function refreshOverdue() {
   });
 
   renderOverdueTable();
+  $('od-caption').textContent = `${overduePolicies.length} matching overdue ${overduePolicies.length === 1 ? 'policy' : 'policies'} · Earliest renewal first`;
+  } catch (error) {
+    if (id !== odRequestId || error.name === 'AbortError') return;
+    odSetError(error.message || 'Could not load overdue policies. Please try again.');
+    $('od-caption').textContent = 'Results could not be updated. Previous results may remain below.';
+  } finally {
+    if (id === odRequestId) {
+      $('overdue-section').setAttribute('aria-busy', 'false');
+      odSyncExport();
+    }
+  }
 }
 
 function renderOverdueTable() {
@@ -241,17 +271,20 @@ for (const id of ["od-month-filter", "od-team-filter", "od-rm-filter", "od-type-
   $(id).addEventListener("change", refreshOverdue);
 $("od-search").addEventListener("input", () => {
   clearTimeout(odSearchTimer);
+  odMarkPending();
   odSearchTimer = setTimeout(refreshOverdue, 250);
 });
 $("od-clear-filters").addEventListener("click", () => { $("od-filters").reset(); refreshOverdue(); });
 
 $("od-export").addEventListener("click", async () => {
-  if ($("od-export").disabled) return;
+  if ($("od-export").disabled || !odAppliedParams) return;
+  const params = new URLSearchParams(odAppliedParams);
+  odExporting = true;
   const button = $("od-export"), label = button.querySelector("span");
   button.disabled = true;
   label.textContent = "Preparing Excel…";
   try {
-    const res = await fetch("/api/renewals/export?" + odParams(), { cache: "no-store" });
+    const res = await fetch("/api/renewals/export?" + params, { cache: "no-store" });
     if (!res.ok) throw new Error("Excel could not be downloaded. Please try again.");
     const blob = await res.blob();
     const url = URL.createObjectURL(blob),
@@ -264,12 +297,15 @@ $("od-export").addEventListener("click", async () => {
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   } catch (err) {
-    alert(err.message);
+    odSetError(err.message);
   } finally {
     label.textContent = "Download Excel";
-    button.disabled = overduePolicies.length === 0;
+    odExporting = false;
+    odSyncExport();
   }
 });
 
-refresh();
-refreshOverdue();
+$('overview-retry').addEventListener('click', refresh);
+$('od-retry').addEventListener('click', refreshOverdue);
+// Both independent requests must settle before the opening screen clears.
+Promise.allSettled([refresh(), refreshOverdue()]).finally(() => window.FincartLoader?.finish());
