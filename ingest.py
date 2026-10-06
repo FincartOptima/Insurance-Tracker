@@ -21,6 +21,29 @@ COLUMN_MAP = {
     "NextPremimum_Date": "next_premium_date",
     "recordStatus": "record_status",
 }
+
+# The "master" export from the portal: a different, richer report (real
+# phone numbers, a New/Port/Renewal split, renewal-chain tracking via
+# Previous Policy Number) but with no reliable per-row RM name - see
+# resolve_team, which leaves these as Unassigned until an RM/client mapping
+# is uploaded separately.
+MASTER_COLUMN_MAP = {
+    "Policy Number": "policy_no",
+    "Previous Policy Number": "previous_policy_no",
+    "Customer Name": "client_name",
+    "Email by IT": "client_email",
+    "Insure": "policy_partner",
+    "Product Genre": "policy",
+    "Line of Business": "insurance_type",
+    "Business Type": "business_type",
+    "Individual Sum Assured": "sum_assured",
+    "Issued Premium": "premium_amount",
+    "Policy End Date": "next_premium_date",
+    "Phone": "phone",
+    "Sales Status": "record_status",
+}
+MASTER_STATUS_OK = {"policy issued"}
+
 NUMERIC_COLS = {"sum_assured", "premium_amount"}
 
 UNASSIGNED_TEAM = "Unassigned"
@@ -78,21 +101,34 @@ def _to_float(value):
         return None
 
 
+_MIN_PLAUSIBLE_DATE = dt.date(2000, 1, 1)
+
+
 def _to_date(value):
+    """Parse a date cell, treating implausible dates as missing rather than
+    literal: some source exports write 1900-01-01 (Excel's own epoch
+    placeholder) for what's really an unknown/blank date, so a parsed date
+    before 2000 is almost certainly that placeholder, not a real policy date.
+    """
     if value in (None, ""):
         return None
+    parsed = None
     if isinstance(value, dt.datetime):
-        return value.date()
-    if isinstance(value, dt.date):
-        return value
-    text = str(value).strip()
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d-%m-%Y %H:%M:%S",
-                "%d-%m-%Y", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y"):
-        try:
-            return dt.datetime.strptime(text, fmt).date()
-        except ValueError:
-            continue
-    return None
+        parsed = value.date()
+    elif isinstance(value, dt.date):
+        parsed = value
+    else:
+        text = str(value).strip()
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d-%m-%Y %H:%M:%S",
+                    "%d-%m-%Y", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y"):
+            try:
+                parsed = dt.datetime.strptime(text, fmt).date()
+                break
+            except ValueError:
+                continue
+    if parsed is not None and parsed < _MIN_PLAUSIBLE_DATE:
+        return None
+    return parsed
 
 
 def normalize_whatsapp_number(value):
@@ -219,6 +255,225 @@ def ingest_employee_file(path, source_name):
         conn.close()
 
 
+def backfill_rm_from_leads(path, source_name):
+    """One-time aid: fill in rm_name for policies that don't have one yet
+    (chiefly those from the master import, which carries no RM column), by
+    matching client_email against a CRM lead export's userId/currentRmName
+    columns. Only touches rows with a currently blank RM - never overwrites
+    an RM already on file. Unlike employee_ref, this file's content isn't
+    stored permanently; it's read, applied once, and discarded.
+    """
+    db.init_db()
+    conn = db.connect()
+    try:
+        wb = _open_workbook(path)
+        ws = wb[wb.sheetnames[0]]
+        rows = ws.iter_rows(values_only=True)
+        try:
+            header = [str(c).strip() if c is not None else "" for c in next(rows)]
+        except StopIteration:
+            raise IngestError("The leads file is empty.")
+
+        idx = {h: i for i, h in enumerate(header)}
+        uid_i, rm_i = idx.get("userId"), idx.get("currentRmName")
+        if uid_i is None or rm_i is None:
+            raise IngestError("Couldn't find userId and currentRmName columns in this file.")
+
+        email_to_rm = {}
+        scanned = 0
+        for raw in rows:
+            if raw is None or all(v is None for v in raw):
+                continue
+            scanned += 1
+            email = raw[uid_i] if uid_i < len(raw) else None
+            rm = raw[rm_i] if rm_i < len(raw) else None
+            if email and "@" in str(email) and rm:
+                email_to_rm[str(email).strip().casefold()] = str(rm).strip()
+        wb.close()
+
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT policy_no, client_email FROM renewals "
+                "WHERE (rm_name IS NULL OR rm_name = '') "
+                "AND client_email IS NOT NULL AND client_email != ''"
+            )
+            blank_rm_rows = cur.fetchall()
+
+            matched = 0
+            for r in blank_rm_rows:
+                rm = email_to_rm.get(r["client_email"].strip().casefold())
+                if rm:
+                    cur.execute("UPDATE renewals SET rm_name = %s WHERE policy_no = %s",
+                                (rm, r["policy_no"]))
+                    matched += 1
+        conn.commit()
+
+        unmatched_rms = recompute_teams(conn)
+        db.set_meta(conn, "last_leads_upload", dt.datetime.now().isoformat(timespec="seconds"))
+        conn.commit()
+
+        return {
+            "scanned": scanned,
+            "emails_loaded": len(email_to_rm),
+            "blank_rm_before": len(blank_rm_rows),
+            "matched": matched,
+            "still_unassigned": len(blank_rm_rows) - matched,
+            "unmatched_rms": unmatched_rms,
+        }
+    finally:
+        conn.close()
+
+
+def _upsert_renewal_row(cur, rec, policy_no, seen_premium, conflicts):
+    """Shared by every policy-data importer: conflict detection (same
+    PolicyNo twice in one file with a different premium) plus the actual
+    upsert. Returns True if the policy already existed, False if new.
+    """
+    if policy_no in seen_premium:
+        prior = seen_premium[policy_no]
+        if prior != rec.get("premium_amount"):
+            conflicts.append({
+                "policy_no": policy_no,
+                "client": rec.get("client_name"),
+                "policy": rec.get("policy"),
+                "kept": rec.get("premium_amount"),
+                "dropped": prior,
+            })
+    seen_premium[policy_no] = rec.get("premium_amount")
+
+    cur.execute("SELECT 1 FROM renewals WHERE policy_no=%s", (policy_no,))
+    exists = cur.fetchone() is not None
+
+    cols = list(rec)
+    cur.execute(
+        "INSERT INTO renewals ({}) VALUES ({}) "
+        "ON CONFLICT (policy_no) DO UPDATE SET {}".format(
+            ", ".join(cols),
+            ", ".join(["%s"] * len(cols)),
+            ", ".join(_conflict_update(c) for c in cols if c != "policy_no"),
+        ),
+        [rec[c] for c in cols],
+    )
+    return exists
+
+
+def ingest_master_file(path, source_name):
+    """Load the richer 'master' export (Policy Number / Business Type /
+    Policy End Date / Phone, etc). Only 'Policy issued' rows are kept -
+    Cancelled and similar statuses are dropped, matching how the regular
+    export only keeps Confirmed rows.
+    """
+    db.init_db()
+    conn = db.connect()
+    try:
+        wb = _open_workbook(path)
+        sheet_name = "Raw Sheet" if "Raw Sheet" in wb.sheetnames else wb.sheetnames[0]
+        ws = wb[sheet_name]
+        rows = ws.iter_rows(values_only=True)
+        try:
+            header = [str(c).strip() if c is not None else "" for c in next(rows)]
+        except StopIteration:
+            raise IngestError("The uploaded file is empty.")
+
+        idx = {h: i for i, h in enumerate(header)}
+        missing = [h for h in ("Policy Number", "Business Type", "Policy End Date", "Sales Status")
+                   if h not in idx]
+        if missing:
+            raise IngestError(
+                "This does not look like the master export - missing column(s): "
+                + ", ".join(missing)
+            )
+
+        now = dt.datetime.now().isoformat(timespec="seconds")
+        inserted = updated = skipped = no_date = 0
+        seen_premium, conflicts = {}, []
+
+        with conn.cursor() as cur:
+            for raw in rows:
+                if raw is None or all(v is None for v in raw):
+                    continue
+                rec = {}
+                for src, dest in MASTER_COLUMN_MAP.items():
+                    i = idx.get(src)
+                    rec[dest] = raw[i] if (i is not None and i < len(raw)) else None
+
+                if str(rec.get("record_status") or "").strip().casefold() not in MASTER_STATUS_OK:
+                    skipped += 1
+                    continue
+
+                policy_no = str(rec.get("policy_no") or "").strip()
+                if not policy_no:
+                    skipped += 1
+                    continue
+
+                for col in NUMERIC_COLS:
+                    rec[col] = _to_float(rec[col])
+                if rec.get("phone"):
+                    rec["phone"] = str(rec["phone"]).strip()
+                if rec.get("previous_policy_no"):
+                    rec["previous_policy_no"] = str(rec["previous_policy_no"]).strip()
+                rec["next_premium_date"] = _to_date(rec["next_premium_date"])
+                if rec["next_premium_date"] is None:
+                    no_date += 1
+
+                rec.pop("record_status", None)
+                rec["policy_no"] = policy_no
+                rec["source_file"] = source_name
+                rec["uploaded_at"] = now
+
+                exists = _upsert_renewal_row(cur, rec, policy_no, seen_premium, conflicts)
+                if exists:
+                    updated += 1
+                else:
+                    inserted += 1
+
+        wb.close()
+        db.set_meta(conn, "last_upload", now)
+        db.set_meta(conn, "last_source", source_name)
+        conn.commit()
+        unmatched_rms = recompute_teams(conn)
+
+        return {
+            "inserted": inserted,
+            "updated": updated,
+            "skipped": skipped,
+            "no_date": no_date,
+            "total_rows": db.count_renewals(conn),
+            "conflicts": conflicts,
+            "unmatched_rms": unmatched_rms,
+        }
+    finally:
+        conn.close()
+
+
+def _sniff_header(path):
+    wb = _open_workbook(path)
+    sheet_name = "Raw Sheet" if "Raw Sheet" in wb.sheetnames else wb.sheetnames[0]
+    ws = wb[sheet_name]
+    try:
+        header = {str(c).strip() for c in next(ws.iter_rows(values_only=True)) if c}
+    except StopIteration:
+        header = set()
+    wb.close()
+    return header
+
+
+def ingest_policy_file(path, source_name):
+    """Detect which policy-data format this is and parse it accordingly -
+    the regular monthly export, or the richer 'master' export from the
+    portal (Policy Number / Business Type / Policy End Date / Phone).
+    """
+    header = _sniff_header(path)
+    if {"Policy Number", "Business Type", "Policy End Date"} <= header:
+        return ingest_master_file(path, source_name)
+    if {"PolicyNo", "recordStatus", "NextPremimum_Date"} <= header:
+        return ingest_file(path, source_name)
+    raise IngestError(
+        "This doesn't look like either known Insurance export format "
+        "(neither the monthly export nor the portal master export)."
+    )
+
+
 def ingest_file(insurance_path, source_name):
     """Load one export into the DB. Returns a summary dict for the UI."""
     db.init_db()
@@ -273,39 +528,12 @@ def ingest_file(insurance_path, source_name):
                 if rec["next_premium_date"] is None:
                     no_date += 1
 
-                # Same PolicyNo twice in one file with a different premium is a
-                # data conflict, not a re-upload: the last row wins either way,
-                # so it has to be surfaced rather than silently overwritten.
-                if policy_no in seen_premium:
-                    prior = seen_premium[policy_no]
-                    if prior != rec["premium_amount"]:
-                        conflicts.append({
-                            "policy_no": policy_no,
-                            "client": rec["client_name"],
-                            "policy": rec["policy"],
-                            "kept": rec["premium_amount"],
-                            "dropped": prior,
-                        })
-                seen_premium[policy_no] = rec["premium_amount"]
-
                 rec.pop("record_status", None)
                 rec["policy_no"] = policy_no
                 rec["source_file"] = source_name
                 rec["uploaded_at"] = now
 
-                cur.execute("SELECT 1 FROM renewals WHERE policy_no=%s", (policy_no,))
-                exists = cur.fetchone() is not None
-
-                cols = list(rec)
-                cur.execute(
-                    "INSERT INTO renewals ({}) VALUES ({}) "
-                    "ON CONFLICT (policy_no) DO UPDATE SET {}".format(
-                        ", ".join(cols),
-                        ", ".join(["%s"] * len(cols)),
-                        ", ".join(_conflict_update(c) for c in cols if c != "policy_no"),
-                    ),
-                    [rec[c] for c in cols],
-                )
+                exists = _upsert_renewal_row(cur, rec, policy_no, seen_premium, conflicts)
                 if exists:
                     updated += 1
                 else:

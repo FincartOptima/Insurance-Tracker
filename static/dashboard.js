@@ -117,6 +117,7 @@ function paramsFromControls() {
     team: $("team-filter").value,
     rm: $("rm-filter").value,
     status: $("status-filter").value,
+    month: $("month-filter").value,
   });
   if ($("timeline").value === "custom") {
     params.set("start", $("start-date").value);
@@ -129,6 +130,18 @@ function syncOptions(id, label, options, selectedValue) {
   select.replaceChildren(
     new Option(label, "all"),
     ...options.map((v) => new Option(v, v)),
+  );
+  select.value = selectedValue;
+}
+function syncMonthOptions(options, selectedValue) {
+  const select = $("month-filter");
+  const fmt = (ym) => {
+    const [y, m] = ym.split("-");
+    return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+  };
+  select.replaceChildren(
+    new Option("All months", "all"),
+    ...options.map((ym) => new Option(fmt(ym), ym)),
   );
   select.value = selectedValue;
 }
@@ -196,6 +209,7 @@ async function refresh() {
     );
     syncOptions("team-filter", "All teams", data.team_options, data.team);
     syncOptions("rm-filter", "All managers", data.rm_options, data.rm);
+    syncMonthOptions(data.month_options, data.month);
     for (const key of ["overdue", "today", "next7", "next30"])
       $("c-" + key).textContent = data.counts[key].toLocaleString("en-IN");
     $("asof").textContent =
@@ -273,6 +287,7 @@ for (const id of [
   "rm-filter",
   "type-filter",
   "status-filter",
+  "month-filter",
 ])
   $(id).addEventListener("change", refresh);
 for (const id of ["start-date", "end-date"])

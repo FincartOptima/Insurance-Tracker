@@ -23,7 +23,9 @@ CREATE TABLE IF NOT EXISTS renewals (
     remarks           TEXT NOT NULL DEFAULT '',
     rescheduled_at    TIMESTAMP,
     phone             TEXT,
-    team              TEXT
+    team              TEXT,
+    business_type     TEXT,
+    previous_policy_no TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_next_premium ON renewals(next_premium_date);
 
@@ -34,6 +36,8 @@ ALTER TABLE renewals ADD COLUMN IF NOT EXISTS remarks TEXT NOT NULL DEFAULT '';
 ALTER TABLE renewals ADD COLUMN IF NOT EXISTS rescheduled_at TIMESTAMP;
 ALTER TABLE renewals ADD COLUMN IF NOT EXISTS phone TEXT;
 ALTER TABLE renewals ADD COLUMN IF NOT EXISTS team TEXT;
+ALTER TABLE renewals ADD COLUMN IF NOT EXISTS business_type TEXT;
+ALTER TABLE renewals ADD COLUMN IF NOT EXISTS previous_policy_no TEXT;
 
 CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,

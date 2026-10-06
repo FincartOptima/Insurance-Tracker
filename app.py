@@ -20,7 +20,18 @@ ALLOWED = {".xls", ".xlsx"}
 
 
 @app.route("/", methods=["GET"])
-def dashboard():
+def overview():
+    db.init_db()
+    conn = db.connect()
+    try:
+        total = db.count_renewals(conn)
+    finally:
+        conn.close()
+    return render_template("overview.html", total=total)
+
+
+@app.route("/tracker", methods=["GET"])
+def tracker():
     db.init_db()
     conn = db.connect()
     try:
@@ -30,7 +41,7 @@ def dashboard():
     return render_template("dashboard.html", total=total)
 
 
-def _render_upload_page(result=None, employee_result=None):
+def _render_upload_page(result=None, employee_result=None, leads_result=None):
     conn = db.connect()
     try:
         total = db.count_renewals(conn)
@@ -40,7 +51,7 @@ def _render_upload_page(result=None, employee_result=None):
         conn.close()
     return render_template(
         "upload.html", total=total, last_upload=last, last_employee=last_employee,
-        result=result, employee_result=employee_result,
+        result=result, employee_result=employee_result, leads_result=leads_result,
     )
 
 
@@ -66,7 +77,8 @@ def upload():
 
     insurance_file = request.files.get("insurance")
     employee_file = request.files.get("employee_ref")
-    if not (insurance_file and insurance_file.filename) and not (employee_file and employee_file.filename):
+    leads_file = request.files.get("leads")
+    if not any(f and f.filename for f in (insurance_file, employee_file, leads_file)):
         flash("Choose at least one file to upload.", "error")
         return redirect(url_for("upload"))
 
@@ -79,12 +91,18 @@ def upload():
 
         result = None
         if insurance_file and insurance_file.filename:
-            result = _save_and_run(insurance_file, ingest.ingest_file)
+            result = _save_and_run(insurance_file, ingest.ingest_policy_file)
+
+        # Leads/RM backfill last - it only fills in RM where the policy
+        # import above left one blank, so it should see today's import first.
+        leads_result = None
+        if leads_file and leads_file.filename:
+            leads_result = _save_and_run(leads_file, ingest.backfill_rm_from_leads)
     except ingest.IngestError as exc:
         flash(str(exc), "error")
         return redirect(url_for("upload"))
 
-    return _render_upload_page(result=result, employee_result=employee_result)
+    return _render_upload_page(result=result, employee_result=employee_result, leads_result=leads_result)
 
 
 def _filtered_renewals():
@@ -94,9 +112,18 @@ def _filtered_renewals():
             conn, bucket=request.args.get("bucket", "next7"),
             search=request.args.get("q", ""), insurance_type=request.args.get("type", "all"),
             team=request.args.get("team", "all"), rm=request.args.get("rm", "all"),
-            status=request.args.get("status", "all"), start=request.args.get("start"),
-            end=request.args.get("end"),
+            status=request.args.get("status", "all"), month=request.args.get("month", "all"),
+            start=request.args.get("start"), end=request.args.get("end"),
         )
+    finally:
+        conn.close()
+
+
+@app.route("/api/overview")
+def api_overview():
+    conn = db.connect()
+    try:
+        return jsonify(queries.overview(conn))
     finally:
         conn.close()
 

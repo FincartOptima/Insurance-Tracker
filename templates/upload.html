@@ -2,7 +2,7 @@
 {% block title %}Upload{% endblock %}
 
 {% block content %}
-<div class="page-heading"><div><p class="eyebrow">DATA MANAGEMENT</p><h1>Import policy data</h1><p class="lede">Keep your renewal workspace up to date with the latest insurance export.</p></div><a class="secondary" href="{{ url_for('dashboard') }}">Back to renewals</a></div>
+<div class="page-heading"><div><p class="eyebrow">DATA MANAGEMENT</p><h1>Import policy data</h1><p class="lede">Keep your renewal workspace up to date with the latest insurance export.</p></div><a class="secondary" href="{{ url_for('tracker') }}">Back to renewals</a></div>
 <div class="upload-grid">
 <form method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" class="card">
   <div class="field">
@@ -16,6 +16,11 @@
     </label>
     <input type="file" name="employee_ref" id="employee_ref" accept=".xls,.xlsx">
     <small>Needs Team and Name columns. Only needed once, or when RMs/teams change &mdash; re-uploading re-checks every stored policy.</small>
+  </div>
+  <div class="field">
+    <label for="leads">Leads export (Client &rarr; RM, one-time backfill)</label>
+    <input type="file" name="leads" id="leads" accept=".xls,.xlsx">
+    <small>Needs userId (email) and currentRmName columns. Only fills in the RM for policies that don't already have one &mdash; never overwrites an existing RM.</small>
   </div>
   <button type="submit" class="primary">Upload &amp; process</button>
 </form>
@@ -42,6 +47,18 @@
     <p>Add them to the employee reference file and re-upload it to fix the Team split.</p>
   </details>
   {% endif %}
+</div>
+{% endif %}
+
+{% if leads_result %}
+<div class="card result">
+  <h2>Leads backfill summary</h2>
+  <div class="stat-grid">
+    <div><span class="stat">{{ leads_result.emails_loaded }}</span><label>emails in leads file</label></div>
+    <div><span class="stat">{{ leads_result.matched }}</span><label>policies matched to an RM</label></div>
+    <div><span class="stat">{{ leads_result.still_unassigned }}</span><label>still no RM</label></div>
+  </div>
+  <p class="small muted">Only policies with a blank RM were touched &mdash; {{ leads_result.blank_rm_before }} had no RM before this ran.</p>
 </div>
 {% endif %}
 
@@ -78,7 +95,7 @@
   </details>
   {% endif %}
 
-  <a class="primary" href="{{ url_for('dashboard') }}">Open dashboard</a>
+  <a class="primary" href="{{ url_for('tracker') }}">Open dashboard</a>
 </div>
 {% endif %}
 

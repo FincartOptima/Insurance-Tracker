@@ -356,6 +356,7 @@ button:hover:not(:disabled),
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
+  padding: 20px 22px;
 }
 .filters-panel {
   padding: 20px 22px;
@@ -1118,5 +1119,31 @@ code {
     transition:
       background-color 0.12s,
       border-color 0.12s;
+  }
+}
+
+/* --- Overview tab --- */
+.overview-grid {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+.overview-grid.two-up {
+  grid-template-columns: 1fr 1fr;
+  margin-top: 20px;
+}
+.overview-grid .panel {
+  margin: 0;
+}
+.chart-wrap {
+  position: relative;
+  width: 100%;
+  min-height: 220px;
+}
+@media (max-width: 900px) {
+  .overview-grid,
+  .overview-grid.two-up {
+    grid-template-columns: 1fr;
   }
 }
