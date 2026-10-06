@@ -42,7 +42,10 @@
 <section class="panel" id="overdue-section">
   <div class="filter-heading">
     <h2>Overdue policies</h2>
-    <button class="text-button" id="od-clear-filters" type="button">Reset filters</button>
+    <div class="filter-heading-actions">
+      <button class="secondary" id="od-export" type="button" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4"/></svg><span>Download Excel</span></button>
+      <button class="text-button" id="od-clear-filters" type="button">Reset filters</button>
+    </div>
   </div>
   <form id="od-filters">
     <div class="filter-grid">
@@ -57,7 +60,7 @@
   <p class="small muted">Click a bar to filter by team too &mdash; it stays in sync with the Team filter above.</p>
   <div class="chart-wrap" style="min-height: 280px;"><canvas id="overdue-team-chart"></canvas></div>
   <div class="table-scroll">
-    <table>
+    <table class="overdue-table">
       <thead><tr>
         <th scope="col">Client &amp; policy</th><th scope="col">Email</th><th scope="col">Phone</th>
         <th scope="col">RM &amp; team</th><th scope="col">Insurer &amp; plan</th>

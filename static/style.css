@@ -1141,6 +1141,39 @@ code {
   width: 100%;
   min-height: 220px;
 }
+.filter-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+/* Overdue table on the Overview tab has its own 7 columns (Email/Phone/Last
+   renewal date instead of the renewal tracker's date/follow-up/actions), so
+   it needs its own widths rather than the generic th:nth-child rules above -
+   those gave the Premium column just 5%, meant for a tiny icon-button column. */
+.overdue-table th:nth-child(1) {
+  width: 19%;
+}
+.overdue-table th:nth-child(2) {
+  width: 18%;
+}
+.overdue-table th:nth-child(3) {
+  width: 12%;
+}
+.overdue-table th:nth-child(4) {
+  width: 15%;
+}
+.overdue-table th:nth-child(5) {
+  width: 15%;
+}
+.overdue-table th:nth-child(6) {
+  width: 13%;
+}
+.overdue-table th:nth-child(7) {
+  width: 8%;
+}
+.overdue-table td:last-child {
+  white-space: nowrap;
+}
 @media (max-width: 900px) {
   .overview-grid,
   .overview-grid.two-up {

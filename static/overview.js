@@ -178,6 +178,7 @@ async function refreshOverdue() {
 
   overduePolicies = data.rows;
   overduePage = 1;
+  $("od-export").disabled = overduePolicies.length === 0;
 
   const teamCounts = {};
   for (const r of overduePolicies) teamCounts[r.team] = (teamCounts[r.team] || 0) + 1;
@@ -243,6 +244,32 @@ $("od-search").addEventListener("input", () => {
   odSearchTimer = setTimeout(refreshOverdue, 250);
 });
 $("od-clear-filters").addEventListener("click", () => { $("od-filters").reset(); refreshOverdue(); });
+
+$("od-export").addEventListener("click", async () => {
+  if ($("od-export").disabled) return;
+  const button = $("od-export"), label = button.querySelector("span");
+  button.disabled = true;
+  label.textContent = "Preparing Excel…";
+  try {
+    const res = await fetch("/api/renewals/export?" + odParams(), { cache: "no-store" });
+    if (!res.ok) throw new Error("Excel could not be downloaded. Please try again.");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob),
+      a = document.createElement("a");
+    a.href = url;
+    const match = (res.headers.get("Content-Disposition") || "").match(/filename="?([^";]+)"?/);
+    a.download = match ? match[1] : "overdue-policies.xlsx";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    label.textContent = "Download Excel";
+    button.disabled = overduePolicies.length === 0;
+  }
+});
 
 refresh();
 refreshOverdue();
