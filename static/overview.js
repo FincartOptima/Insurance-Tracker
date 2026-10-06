@@ -1,7 +1,7 @@
 const $ = (id) => document.getElementById(id);
 
-const PALETTE = ["#285f95", "#71a39a", "#c39749", "#ab413c", "#6b5ca5",
-                 "#3f8f6b", "#b06a8f", "#8a9eb4", "#c2884a", "#4a7fb5"];
+const PALETTE = ["#1747bd", "#568ef0", "#102a56", "#91b6f6", "#326ec9",
+                 "#b7cff5", "#1b518b", "#6ea8de", "#4163a1", "#d0e1fa"];
 
 function esc(s) {
   return (s || "").replace(/[&<>"']/g, (c) => (
@@ -76,8 +76,10 @@ $("overdue-next").addEventListener("click", () => { overduePage++; renderOverdue
 $("clear-team-pick").addEventListener("click", () => { pickedTeam = null; overduePage = 1; renderOverdueTable(); });
 
 async function refresh() {
+  $("overview-error").hidden = true;
+  try {
   const res = await fetch("/api/overview", { cache: "no-store" });
-  if (!res.ok) return;
+  if (!res.ok) throw new Error("Unable to load portfolio");
   const data = await res.json();
 
   $("ov-overdue").textContent = data.total_overdue.toLocaleString("en-IN");
@@ -98,8 +100,8 @@ async function refresh() {
     data: {
       labels: teams.map((t) => t.team),
       datasets: [
-        { label: "Overdue", data: teams.map((t) => t.overdue), backgroundColor: "#ab413c" },
-        { label: "Upcoming (30d)", data: teams.map((t) => t.upcoming), backgroundColor: "#71a39a" },
+        { label: "Overdue", data: teams.map((t) => t.overdue), backgroundColor: "#1747bd" },
+        { label: "Upcoming (30d)", data: teams.map((t) => t.upcoming), backgroundColor: "#91b6f6" },
       ],
     },
     options: {
@@ -117,7 +119,7 @@ async function refresh() {
     data: {
       labels: overdueTeamOrder,
       datasets: [{ label: "Overdue", data: overdueTeamOrder.map((t) => teams.find((x) => x.team === t).overdue),
-                   backgroundColor: overdueTeamOrder.map((t) => t === pickedTeam ? "#8a2f2a" : "#ab413c") }],
+                   backgroundColor: overdueTeamOrder.map((t) => t === pickedTeam ? "#102a56" : "#1747bd") }],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
@@ -169,6 +171,13 @@ async function refresh() {
       scales: { x: { beginAtZero: true, ticks: { precision: 0 } } },
     },
   });
+  } catch (error) {
+    $('overview-error').hidden = false;
+    $('ov-asof').textContent = 'Portfolio data is unavailable.';
+  } finally {
+    window.FincartLoader?.finish();
+  }
 }
 
+$('overview-retry').addEventListener('click', refresh);
 refresh();

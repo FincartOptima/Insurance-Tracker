@@ -19,7 +19,7 @@ def policy(number, days, **overrides):
              policy_partner='Example Insurance', insurance_type='Health',
              sum_assured=Decimal('500000.00'), premium_amount=Decimal('12345.67'),
              next_premium_date=TODAY + dt.timedelta(days=days) if days is not None else None,
-             status='Not Done', remarks='', rescheduled_at=None)
+             status='Not Done', remarks='', rescheduled_at=None, previous_policy_no='', business_type='New')
     return {**r, **overrides}
 
 

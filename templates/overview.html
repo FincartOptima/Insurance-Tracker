@@ -2,19 +2,20 @@
 {% block title %}Overview{% endblock %}
 {% block content %}
 <div class="page-heading">
-  <div><p class="eyebrow">PORTFOLIO</p><h1>Overview</h1><p class="lede">Where renewals stand right now, across every team.</p></div>
+  <div><p class="eyebrow">PORTFOLIO</p><h1>Portfolio overview</h1><p class="lede">Where renewals stand right now, across every team.</p></div>
   <div class="heading-actions"><a class="secondary" href="{{ url_for('tracker') }}">Open renewal tracker</a></div>
 </div>
 
 {% if total == 0 %}
 <section class="empty card"><div class="empty-symbol" aria-hidden="true">↥</div><h2>Nothing to show yet</h2><p>Import your insurance export to see portfolio-wide renewal stats.</p><a class="primary" href="{{ url_for('upload') }}">Import your first file</a></section>
 {% else %}
+<div class="notice error" id="overview-error" role="alert" hidden><span>Unable to load your portfolio. Please try again.</span><button class="text-button" id="overview-retry" type="button">Try again</button></div>
 <noscript><p class="notice error">Enable JavaScript to view the overview.</p></noscript>
 
-<section class="bucket-cards" aria-label="Portfolio summary">
-  <div class="bcard" aria-hidden="true"><span class="metric-label"><i class="metric-dot overdue" aria-hidden="true"></i>Overdue</span><strong id="ov-overdue">—</strong><small>Already past the renewal date, not yet renewed</small></div>
-  <div class="bcard" aria-hidden="true"><span class="metric-label"><i class="metric-dot next30" aria-hidden="true"></i>Upcoming (30 days)</span><strong id="ov-upcoming">—</strong><small>Due in the next 30 days</small></div>
-  <div class="bcard" aria-hidden="true"><span class="metric-label"><i class="metric-dot all" aria-hidden="true"></i>Active policies</span><strong id="ov-active">—</strong><small>Excludes cancelled and already-renewed policies</small></div>
+<section class="bucket-cards portfolio-cards" aria-label="Portfolio summary">
+  <div class="bcard"><span class="metric-label"><i class="metric-dot overdue" aria-hidden="true"></i>Overdue</span><strong id="ov-overdue">—</strong><small>Already past the renewal date, not yet renewed</small></div>
+  <div class="bcard"><span class="metric-label"><i class="metric-dot next30" aria-hidden="true"></i>Upcoming (30 days)</span><strong id="ov-upcoming">—</strong><small>Due in the next 30 days</small></div>
+  <div class="bcard"><span class="metric-label"><i class="metric-dot all" aria-hidden="true"></i>Active policies</span><strong id="ov-active">—</strong><small>Excludes cancelled and already-renewed policies</small></div>
 </section>
 <div class="context-line"><p id="ov-asof">Loading…</p><p>Superseded policies (already renewed under a new number) are excluded everywhere here.</p></div>
 
@@ -66,4 +67,4 @@
 </section>
 {% endif %}
 {% endblock %}
-{% block scripts %}{% if total > 0 %}<script src="{{ url_for('static', filename='chart.min.js') }}"></script><script src="{{ url_for('static', filename='overview.js') }}" defer></script>{% endif %}{% endblock %}
+{% block scripts %}{% if total > 0 %}<script src="{{ url_for('static', filename='chart.min.js') }}"></script><script src="{{ url_for('static', filename='overview.js', v='blue-20261006') }}" defer></script>{% endif %}{% endblock %}

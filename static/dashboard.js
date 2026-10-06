@@ -146,7 +146,7 @@ function syncMonthOptions(options, selectedValue) {
   select.value = selectedValue;
 }
 function setError(message) {
-  $("error").textContent = message;
+  $("error-message").textContent = message;
   $("error").hidden = !message;
 }
 function markPending() {
@@ -171,6 +171,7 @@ async function refresh() {
   const id = requestId,
     params = paramsFromControls();
   syncTimeline();
+  updateFilterCount();
   setError("");
   if (
     params.get("bucket") === "custom" &&
@@ -235,7 +236,10 @@ async function refresh() {
     $("results-caption").textContent =
       "Results could not be updated. Change a filter or reset filters to retry.";
   } finally {
-    if (id === requestId) $("results").setAttribute("aria-busy", "false");
+    if (id === requestId) {
+      $("results").setAttribute("aria-busy", "false");
+      window.FincartLoader?.finish();
+    }
   }
 }
 function renderRows() {
@@ -262,6 +266,18 @@ function renderRows() {
   $("prev-page").disabled = page <= 1;
   $("next-page").disabled = start + size >= rows.length;
 }
+function updateFilterCount() {
+  const ids = ['month-filter', 'team-filter', 'rm-filter', 'type-filter', 'status-filter'];
+  const count = ids.filter((id) => $(id).value !== 'all').length + ($('timeline').value !== 'next7' ? 1 : 0);
+  $('filter-count').textContent = count;
+  $('filter-count').hidden = count === 0;
+}
+$('toggle-filters').addEventListener('click', () => {
+  const collapsed = !$('filter-options').hidden;
+  $('filter-options').hidden = collapsed;
+  $('toggle-filters').setAttribute('aria-expanded', String(!collapsed));
+});
+$('retry-data').addEventListener('click', refresh);
 function clearFilters() {
   $("filters").reset();
   $("start-date").value = "";
