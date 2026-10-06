@@ -170,21 +170,30 @@ def recompute_teams(conn):
     Always applies to every row (not just ones missing a team) - rm_name
     itself gets refreshed on every insurance re-upload, so a policy that
     changed hands to a different RM should have its team follow.
+
+    resolve_team's result depends only on rm_name, so this groups by the
+    distinct rm_name values actually present (a few dozen) rather than
+    updating row by row (thousands of policies) - each UPDATE is a full
+    round trip to the (remote, free-tier) database, and with thousands of
+    policies the old per-row loop routinely ran past Render's 30s request
+    timeout, which is what made uploads fail outright.
     """
     with conn.cursor() as cur:
         cur.execute("SELECT lower(name) AS name, team FROM employee_ref")
         emp_map = {r["name"]: r["team"] for r in cur.fetchall()}
 
-        cur.execute("SELECT policy_no, rm_name FROM renewals")
-        rows = cur.fetchall()
+        cur.execute("SELECT DISTINCT rm_name FROM renewals")
+        distinct_rms = [r["rm_name"] for r in cur.fetchall()]
 
         unmatched = set()
-        for r in rows:
-            team, unmatched_name = resolve_team(r["rm_name"], emp_map)
+        for rm_name in distinct_rms:
+            team, unmatched_name = resolve_team(rm_name, emp_map)
             if unmatched_name:
                 unmatched.add(unmatched_name)
-            cur.execute("UPDATE renewals SET team = %s WHERE policy_no = %s",
-                        (team, r["policy_no"]))
+            if rm_name:
+                cur.execute("UPDATE renewals SET team = %s WHERE rm_name = %s", (team, rm_name))
+            else:
+                cur.execute("UPDATE renewals SET team = %s WHERE rm_name IS NULL OR rm_name = ''", (team,))
     conn.commit()
     return sorted(unmatched)
 
