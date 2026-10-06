@@ -162,6 +162,10 @@ def overview(conn, today=None):
     rows, superseded_nos = _fetch_all(conn)
     today = today or business_today()
 
+    # Detail-level overdue/upcoming policies (with client info) are served by
+    # build() instead - the Overview page's Overdue table calls /api/renewals
+    # directly so it gets the exact same filtering (team, RM, month, search,
+    # status) as the renewal tracker, for free. This function only aggregates.
     active = []
     for r in rows:
         if r["policy_no"] in superseded_nos:
@@ -169,15 +173,8 @@ def overview(conn, today=None):
         date = r["next_premium_date"]
         days = (date - today).days if date else None
         active.append({
-            "policy_no": r["policy_no"],
-            "client_name": r["client_name"] or "",
-            "client_email": r["client_email"] or "",
-            "phone": r["phone"] or "",
-            "rm_name": r["rm_name"] or "",
             "team": r["team"] or UNASSIGNED_TEAM,
-            "policy": r["policy"] or "",
             "days_until": days,
-            "last_renewal_date": date.isoformat() if date else None,
             "business_type": r["business_type"] or "Unspecified",
             "policy_partner": r["policy_partner"] or "Unspecified",
             "premium_amount": float(r["premium_amount"]) if r["premium_amount"] is not None else 0.0,
@@ -185,7 +182,6 @@ def overview(conn, today=None):
 
     overdue = [r for r in active if r["days_until"] is not None and r["days_until"] < 0]
     upcoming = [r for r in active if r["days_until"] is not None and 0 <= r["days_until"] <= 30]
-    overdue_policies = sorted(overdue, key=lambda r: r["days_until"])
 
     overdue_by_team = Counter(r["team"] for r in overdue)
     upcoming_by_team = Counter(r["team"] for r in upcoming)
@@ -218,7 +214,6 @@ def overview(conn, today=None):
         "team_breakdown": team_breakdown,
         "business_type": business_type_breakdown,
         "insurer": insurer_breakdown,
-        "overdue_policies": overdue_policies,
     }
 
 
